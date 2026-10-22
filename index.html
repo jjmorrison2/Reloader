@@ -1,0 +1,1740 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reloading Calculator</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --accent: #2a78d6;
+    --accent-soft: #cde2fb;
+    --good: #0ca30c;
+    --good-text: #006300;
+    --warn: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255,255,255,0.10);
+      --accent: #3987e5;
+      --accent-soft: #184f95;
+      --good: #0ca30c;
+      --good-text: #0ca30c;
+      --warn: #fab219;
+      --serious: #ec835a;
+      --critical: #d03b3b;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  a { color: var(--accent); }
+
+  .safety-strip {
+    background: var(--critical);
+    color: #fff;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+  }
+  header.app {
+    max-width: 1100px; margin: 0 auto; padding: 22px 20px 0;
+  }
+  header.app h1 { margin: 0 0 2px; font-size: 26px; letter-spacing: -0.02em; }
+  header.app p.sub { margin: 0; color: var(--ink-2); font-size: 14px; }
+
+  nav.tabs {
+    max-width: 1100px; margin: 18px auto 0; padding: 0 20px;
+    display: flex; gap: 4px; border-bottom: 1px solid var(--grid);
+  }
+  nav.tabs button {
+    appearance: none; background: none; border: none; cursor: pointer;
+    font: inherit; font-weight: 600; font-size: 14px; color: var(--ink-2);
+    padding: 9px 14px; border-radius: 8px 8px 0 0;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  nav.tabs button:hover { color: var(--ink); background: var(--surface); }
+  nav.tabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+
+  /* ---------- calculator picker ---------- */
+  .picker {
+    display: grid; grid-template-columns: 1fr 1.4fr 1.4fr; gap: 14px;
+  }
+  @media (max-width: 780px) { .picker { grid-template-columns: 1fr; } }
+  .field label {
+    display: block; font-size: 12px; font-weight: 700; color: var(--ink-2);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+  }
+  .field .stepnum {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 11px; margin-right: 6px;
+  }
+  select, input[type="number"], input[type="text"], input[type="url"] {
+    width: 100%; padding: 8px 10px; font: inherit;
+    background: var(--page); color: var(--ink);
+    border: 1px solid var(--baseline); border-radius: 8px;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin-top: 8px; }
+  .velrange-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ---------- result cards ---------- */
+  .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; margin-top: 18px; }
+  .load-card { cursor: pointer; transition: border-color .12s; position: relative; }
+  .load-card:hover { border-color: var(--accent); }
+  .load-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .load-card h3 { margin: 0; font-size: 16px; }
+  .load-card .bullet-line { color: var(--ink-2); font-size: 13px; margin: 1px 0 10px; }
+  .charge-tile .tile-label { font-size: 12px; color: var(--ink-2); }
+  .charge-tile .tile-value { font-size: 30px; font-weight: 650; line-height: 1.15; }
+  .charge-tile .tile-value .unit { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+  .charge-tile .tile-delta { font-size: 12.5px; color: var(--ink-2); }
+  .status-line { display: flex; gap: 7px; align-items: flex-start; font-size: 13px; margin-top: 10px; }
+  .status-line .icon { flex: none; font-weight: 700; }
+  .status-ok .icon { color: var(--good-text); }
+  .status-nearmax .icon, .status-nocurve .icon { color: var(--serious); }
+  .status-above .icon { color: var(--critical); }
+  .status-below .icon { color: var(--serious); }
+  .startmax-row {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 12.5px; color: var(--ink-2); margin-top: 10px;
+    border-top: 1px solid var(--grid); padding-top: 8px;
+  }
+  .startmax-row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px;
+  }
+  .badge.verified { color: var(--good-text); background: color-mix(in srgb, var(--good) 12%, transparent); }
+  .badge.unverified { color: var(--ink); background: color-mix(in srgb, var(--warn) 22%, transparent); }
+  .badge.userload { color: var(--ink-2); background: color-mix(in srgb, var(--muted) 18%, transparent); }
+
+  .band { margin-top: 12px; }
+  .band svg { display: block; width: 100%; height: 34px; }
+
+  .empty-note { color: var(--ink-2); padding: 26px 10px; text-align: center; }
+
+  /* ---------- rifle & conditions ---------- */
+  .setup-card { margin-top: 14px; }
+  .setup-card summary {
+    cursor: pointer; font-weight: 700; font-size: 12px; color: var(--ink-2);
+    text-transform: uppercase; letter-spacing: 0.05em; user-select: none;
+  }
+  .setup-card summary .setup-active { color: var(--accent); text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 14px; margin-top: 12px; }
+  .setup-grid label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 4px; }
+  .setup-tip { color: var(--ink-2); font-size: 12.5px; margin: 10px 0 0; }
+
+  /* ---------- recipe detail ---------- */
+  .recipe { margin-top: 20px; }
+  .recipe h2 { font-size: 20px; margin: 0 0 2px; }
+  .recipe .recipe-sub { color: var(--ink-2); font-size: 13.5px; margin: 0 0 14px; }
+  .recipe-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .recipe-grid { grid-template-columns: 1fr; } }
+  table.spec { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.spec th, table.spec td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  table.spec th { width: 42%; color: var(--ink-2); font-weight: 600; }
+  table.spec td { font-variant-numeric: tabular-nums; }
+  table.ladder { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+  table.ladder th, table.ladder td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: right; font-variant-numeric: tabular-nums; }
+  table.ladder th:first-child, table.ladder td:first-child { text-align: left; }
+  table.ladder tr.target-row td { font-weight: 700; }
+  .warnbox {
+    border-left: 3px solid var(--critical);
+    background: color-mix(in srgb, var(--critical) 7%, transparent);
+    padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 13.5px; margin-top: 14px;
+  }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .btn {
+    appearance: none; font: inherit; font-weight: 600; font-size: 13.5px;
+    padding: 7px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--baseline); background: var(--surface); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { color: #fff; opacity: .92; }
+  .btn.danger { color: var(--critical); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+  /* ---------- library ---------- */
+  .lib-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  table.lib { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.lib th, table.lib td { padding: 7px 8px; border-bottom: 1px solid var(--grid); text-align: left; vertical-align: top; }
+  table.lib th { color: var(--ink-2); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  table.lib td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cart-head td { font-weight: 700; background: color-mix(in srgb, var(--accent) 6%, transparent); font-size: 14px; }
+  .rowbtn { background: none; border: none; cursor: pointer; color: var(--accent); font: inherit; font-size: 13px; padding: 0 4px; }
+  .rowbtn.del { color: var(--critical); }
+  .lib-scroll { overflow-x: auto; }
+
+  /* ---------- steps / safety ---------- */
+  .prose { max-width: 820px; }
+  .prose h2 { font-size: 19px; margin: 26px 0 8px; }
+  .prose h2:first-child { margin-top: 0; }
+  .prose ol li, .prose ul li { margin-bottom: 8px; }
+  .prose .tip { color: var(--ink-2); font-size: 13.5px; }
+
+  /* ---------- modal ---------- */
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: none; align-items: flex-start; justify-content: center; z-index: 50;
+    padding: 40px 16px; overflow-y: auto;
+  }
+  .modal-back.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    max-width: 640px; width: 100%; padding: 22px 24px;
+  }
+  .modal h2 { margin: 0 0 10px; font-size: 19px; }
+  .modal .formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 8px; }
+  @media (max-width: 640px) { .modal .formgrid { grid-template-columns: 1fr; } }
+  .modal .formgrid label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 3px; }
+  .modal .full { grid-column: 1 / -1; }
+  .ack-list { margin: 0 0 6px; padding-left: 20px; }
+  .ack-list li { margin-bottom: 9px; font-size: 14px; }
+
+  footer.app {
+    max-width: 1100px; margin: 30px auto 0; padding: 14px 20px 30px;
+    border-top: 1px solid var(--grid); color: var(--muted); font-size: 12.5px;
+  }
+
+  /* ---------- print: recipe card only ---------- */
+  @media print {
+    body.print-recipe .safety-strip, body.print-recipe header.app, body.print-recipe nav.tabs,
+    body.print-recipe .picker-card, body.print-recipe .setup-card, body.print-recipe .results,
+    body.print-recipe footer.app,
+    body.print-recipe .btn-row, body.print-recipe .modal-back { display: none !important; }
+    body.print-recipe main { padding: 0; }
+    body.print-recipe .recipe { margin: 0; }
+    .card { border: 1px solid #999; }
+  }
+</style>
+</head>
+<body>
+
+<div class="safety-strip">&#9888;&#65039; Reference tool only &mdash; verify every load against a current published manual. Always start at the published starting charge and work up. Never exceed a published maximum.</div>
+<div id="storage-warn" style="display:none;background:var(--warn);color:#0b0b0b;text-align:center;font-size:13px;font-weight:600;padding:6px 12px">&#9888; This browser is blocking local storage &mdash; changes to your library cannot be saved. Export your library (Load Library tab) before closing this tab.</div>
+
+<header class="app">
+  <h1>Reloading Calculator</h1>
+  <p class="sub">Pick a cartridge, bullet, and target muzzle velocity &mdash; get matching published loads, an estimated charge, and a work-up plan.</p>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="calc" class="active">Calculator</button>
+  <button data-tab="log">Load Log</button>
+  <button data-tab="ballistics">Ballistics</button>
+  <button data-tab="library">Load Library</button>
+  <button data-tab="steps">How to Reload</button>
+  <button data-tab="safety">Safety &amp; About</button>
+</nav>
+
+<main>
+  <!-- ================= CALCULATOR ================= -->
+  <section class="panel active" id="panel-calc">
+    <div class="card picker-card">
+      <div class="picker">
+        <div class="field">
+          <label><span class="stepnum">1</span>Cartridge</label>
+          <select id="sel-cartridge"></select>
+        </div>
+        <div class="field">
+          <label><span class="stepnum">2</span>Bullet (exact bullet from published data)</label>
+          <select id="sel-bullet"></select>
+          <div class="velrange-note" id="bullet-note"></div>
+        </div>
+        <div class="field">
+          <label><span class="stepnum">3</span>Target muzzle velocity (fps)</label>
+          <input type="number" id="inp-vel" step="10">
+          <input type="range" id="rng-vel" step="5">
+          <div class="velrange-note" id="vel-note"></div>
+        </div>
+      </div>
+    </div>
+
+    <details class="card setup-card" id="setup-card">
+      <summary>Your rifle &amp; conditions <span class="setup-active" id="setup-summary"></span></summary>
+      <div class="setup-grid">
+        <div><label>Your barrel length (in)</label><input type="number" id="s-barrel" step="0.5" min="1" max="50" placeholder="e.g. 22"></div>
+        <div><label>Your twist rate</label><input type="text" id="s-twist" placeholder='e.g. 1:8"'></div>
+        <div><label>Temperature (&deg;F)</label><input type="number" id="s-temp" step="1" min="-40" max="130" placeholder="e.g. 45"></div>
+        <div><label>fps per inch of barrel</label><input type="number" id="s-fpi" step="1" min="0" max="100" placeholder="25"></div>
+        <div><label>fps per &deg;F</label><input type="number" id="s-fpd" step="0.1" min="0" max="5" placeholder="1.0"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" id="s-clear">Clear</button></div>
+      </div>
+      <p class="setup-tip"><b>These are rule-of-thumb estimates, not ballistics.</b> Published velocities come from each load&rsquo;s test barrel; your barrel and temperature shift what <i>you</i> should expect. When set, your target velocity is converted to its test-barrel equivalent before interpolating &mdash; the charge always stays inside the published start&ndash;max range. Defaults: 25 fps/inch (rifle rule of thumb; pistols are lower), 1.0 fps/&deg;F vs a 70&deg;F reference (temp-stable powders like H4350/Varget run lower). Twist is reference-only &mdash; it affects bullet stability, never charge. <b>The chronograph is the truth; work up regardless.</b></p>
+    </details>
+
+    <div class="results" id="results"></div>
+    <div id="recipe-holder"></div>
+  </section>
+
+  <!-- ================= LOAD LOG ================= -->
+  <section class="panel" id="panel-log">
+    <div class="lib-toolbar">
+      <button class="btn primary" id="btn-add-log">+ Log a range session</button>
+      <button class="btn" id="btn-export-log">Export log</button>
+      <button class="btn" id="btn-import-log">Import log</button>
+      <input type="file" id="file-import-log" accept=".json,application/json" style="display:none">
+    </div>
+    <div class="card lib-scroll" id="log-table-wrap"></div>
+    <p class="tip" style="color:var(--ink-2);font-size:13px;margin-top:10px">Record what each charge actually did in <i>your</i> rifle: chronograph strings, group size, and any pressure signs. Logged velocities are plotted on that load's recipe chart next to the published curve, and the Ballistics tab can use your logged average as its muzzle velocity.</p>
+  </section>
+
+  <!-- ================= BALLISTICS ================= -->
+  <section class="panel" id="panel-ballistics">
+    <div class="card">
+      <div class="btn-row" style="margin:0 0 12px">
+        <button class="btn" id="btn-bal-fill">Fill from selected recipe</button>
+        <span class="tip" style="color:var(--ink-2);font-size:13px;align-self:center" id="bal-fill-note"></span>
+      </div>
+      <div class="setup-grid">
+        <div><label>Muzzle velocity (fps)</label><input type="number" id="b-mv" step="1" min="300" max="5000" placeholder="e.g. 2650"></div>
+        <div><label>Ballistic coefficient</label><input type="number" id="b-bc" step="0.001" min="0.05" max="1.5" placeholder="e.g. 0.462"></div>
+        <div><label>Drag model</label><select id="b-model"><option value="G1">G1</option><option value="G7">G7</option></select></div>
+        <div><label>Bullet weight (gr)</label><input type="number" id="b-wt" step="1" min="10" max="1000" placeholder="e.g. 168"></div>
+        <div><label>Zero range (yd)</label><input type="number" id="b-zero" step="25" min="10" max="1000" value="100"></div>
+        <div><label>Sight height (in)</label><input type="number" id="b-sight" step="0.1" min="0" max="5" value="1.5"></div>
+        <div><label>Max range (yd)</label><input type="number" id="b-max" step="50" min="100" max="2000" value="500"></div>
+        <div><label>Step (yd)</label><input type="number" id="b-step" step="25" min="25" max="200" value="50"></div>
+        <div><label>Wind (mph)</label><input type="number" id="b-wind" step="1" min="0" max="60" value="10"></div>
+        <div><label>Wind angle (&deg;, 90 = full crosswind)</label><input type="number" id="b-wangle" step="15" min="0" max="180" value="90"></div>
+        <div><label>Temperature (&deg;F)</label><input type="number" id="b-temp" step="1" min="-40" max="130" value="59"></div>
+        <div><label>Altitude (ft)</label><input type="number" id="b-alt" step="100" min="-1000" max="15000" value="0"></div>
+        <div><label>Pressure (inHg, blank = std at altitude)</label><input type="number" id="b-press" step="0.01" min="15" max="35" placeholder="29.92"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn primary" id="btn-bal-calc">Calculate</button></div>
+      </div>
+      <p class="setup-tip">Point-mass exterior ballistics using the standard G1/G7 drag curves and your bullet&rsquo;s published BC (get it from the bullet maker &mdash; the load library doesn&rsquo;t store BCs). Wind drift uses the standard lag-time method. Good to a few inches at hunting ranges; it is not a substitute for confirming your drops on paper.</p>
+    </div>
+    <div id="bal-results" style="margin-top:16px"></div>
+  </section>
+
+  <!-- ================= LIBRARY ================= -->
+  <section class="panel" id="panel-library">
+    <div class="lib-toolbar">
+      <button class="btn primary" id="btn-add-load">+ Add load</button>
+      <button class="btn" id="btn-export">Export JSON</button>
+      <button class="btn" id="btn-import">Import JSON</button>
+      <input type="file" id="file-import" accept=".json,application/json" style="display:none">
+      <button class="btn danger" id="btn-restore">Restore built-in data</button>
+    </div>
+    <div class="card lib-scroll" id="lib-table-wrap"></div>
+    <p class="tip" style="color:var(--ink-2);font-size:13px;margin-top:10px">
+      Every entry links to the published source it was transcribed from. Entries marked
+      <span class="badge verified">&#10003; verified</span> were independently re-checked against the source when this library was built;
+      <span class="badge unverified">&#9888; unverified</span> entries could not be re-checked &mdash; confirm them yourself before use.
+      Either way: <b>always cross-check against the publisher's current data before loading.</b>
+    </p>
+  </section>
+
+  <!-- ================= STEPS ================= -->
+  <section class="panel" id="panel-steps">
+    <div class="card prose">
+      <h2>The reloading process, step by step</h2>
+      <p class="tip">This is the general sequence for metallic-cartridge handloading. Your press and die instructions take precedence for equipment specifics. Work with <b>one powder on the bench at a time</b>, straight from its original, labeled container.</p>
+      <ol>
+        <li><b>Inspect the brass.</b> Discard cases with splits, neck cracks, a bright ring ahead of the case head (incipient case-head separation), crushed mouths, or loose primer pockets. Sort by headstamp for best consistency.</li>
+        <li><b>Clean the cases</b> (tumbler, wet pin, or ultrasonic) so dirt doesn't scratch your dies and you can see defects.</li>
+        <li><b>Lubricate and resize / deprime.</b> Bottleneck rifle cases need case lube (stuck cases are no fun); straight-wall pistol cases with carbide dies don't. Full-length size for autoloaders; neck sizing is a bolt-gun-only option.</li>
+        <li><b>Check case length &mdash; trim if needed.</b> Compare to the maximum case length for your cartridge; trim to the trim-to length, then chamfer and deburr the mouth. Rifle brass stretches and needs this regularly; pistol brass rarely does.</li>
+        <li><b>Prime.</b> Seat the primer type your load data specifies, anvil-side in, just below flush. A high primer can cause misfires or slam-fires. Note some brass runs a different primer size than typical for the cartridge (e.g. small-primer .45 ACP and some 6.5 Creedmoor brass) &mdash; check your headstamps.</li>
+        <li><b>Charge with powder.</b> Set your measure, then <b>verify the charge on a scale</b> &mdash; check the first several throws and spot-check continuously (every charge for max-effort or small-capacity loads). Charge cases in a loading block and <b>visually inspect every case with a light</b> before seating bullets: identical powder height in every case. This is your double-charge / no-charge (squib) check.</li>
+        <li><b>Seat the bullet</b> to the cartridge overall length (COL/COAL) shown in the data. Seating deeper than published raises pressure &mdash; especially in small pistol cases.</li>
+        <li><b>Crimp appropriately.</b> Taper crimp for auto-pistol rounds that headspace on the case mouth (9mm, .45 ACP); roll crimp for revolver rounds with a cannelure (.38 Special); most bottleneck rifle rounds need only neck tension.</li>
+        <li><b>Gauge every round.</b> Case gauge or barrel "plunk test" for pistol; check COAL and function. Look for bulges, high primers, shaved jackets.</li>
+        <li><b>Label the box</b> with cartridge, bullet, powder and charge, primer, brass, COAL, and date. Unlabeled handloads are hazardous waste.</li>
+      </ol>
+
+      <h2>Working up a load (the ladder)</h2>
+      <ol>
+        <li>Load 5&ndash;10 rounds at each charge step the calculator's ladder shows, starting at the <b>published starting charge</b> &mdash; never at the calculated target.</li>
+        <li>Fire the lowest charge first. Inspect <b>every</b> fired case and primer before moving to the next step up.</li>
+        <li>Chronograph each step. Published velocities came from the publisher's test barrel; yours will differ. If your velocity reaches your target &mdash; or your measured velocity runs well above the published number for that charge &mdash; <b>stop there</b>.</li>
+        <li>If you see any pressure sign (see Safety tab), stop, back off, and pull any remaining higher-charge rounds.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= SAFETY ================= -->
+  <section class="panel" id="panel-safety">
+    <div class="card prose">
+      <h2>What this tool does &mdash; and doesn't</h2>
+      <ul>
+        <li>It <b>only interpolates linearly between a published starting load and a published maximum load</b> from powder-manufacturer data. It contains no internal-ballistics model, and it will never suggest a charge above a published maximum or below a published start.</li>
+        <li>The real charge-to-velocity curve is not perfectly linear, and your barrel is not the test barrel. The estimated charge is a <b>planning number for your work-up ladder</b>, not a load to jump to. The chronograph and your fired brass are the truth.</li>
+        <li>Published data applies to the <b>exact components tested</b> &mdash; that bullet, that case, that primer, that COAL. Changing any component means going back to the starting charge. If your exact bullet isn't listed, get data for it from a published manual rather than assuming same-weight data transfers.</li>
+        <li>This library was seeded from powder manufacturers' free published data, with each entry linked to its source. Transcription errors are possible anywhere &mdash; including here &mdash; which is why every recipe card carries its source link. <b>Check it.</b></li>
+        <li><b>Personal use only.</b> The publishers (notably Hodgdon) license their data for personal, non-commercial use. Use this tool privately; don't republish, redistribute, or bundle its built-in data into anything you share.</li>
+      </ul>
+
+      <h2>About the rifle &amp; conditions adjustments</h2>
+      <ul>
+        <li>The barrel-length and temperature inputs apply <b>rule-of-thumb estimates</b> (default 25 fps per inch of barrel, 1.0 fps per &deg;F vs a 70&deg;F reference) to the velocity you should <i>expect</i> &mdash; they never change the published charge limits. Real barrels vary a lot; only a chronograph tells you your actual velocity.</li>
+        <li>Powder temperature sensitivity varies widely: "Extreme"-line powders (H4350, Varget, H4895) and Vihtavuori powders run much lower than 1 fps/&deg;F; ball powders often run higher. Adjust the fps/&deg;F figure to your powder, or set it to 0 and rely on the chronograph.</li>
+        <li><b>Heat raises pressure.</b> A load worked up in winter can show pressure signs (or worse) on a 100&deg;F day, especially near max. Re-verify warm-weather performance, and keep extra margin below max on loads you'll shoot hot.</li>
+        <li>Twist rate is recorded for reference only: it affects bullet <i>stability</i> (whether a long/heavy bullet flies point-first), not charge or velocity. Check the bullet manufacturer's minimum twist for your bullet.</li>
+      </ul>
+
+      <h2>Pressure signs &mdash; stop if you see any</h2>
+      <ul>
+        <li>Flattened, cratered, pierced, or leaking primers (soot around the primer).</li>
+        <li>Shiny swipe or ejector-hole mark on the case head; extractor gouges.</li>
+        <li>Hard extraction, sticky bolt lift, or a sluggish/violent change in cycling.</li>
+        <li>Case-head expansion; primer pockets loose after one or two firings.</li>
+        <li>Chronograph velocity significantly above the published figure for that charge.</li>
+      </ul>
+
+      <h2>Low-charge dangers (why "just load it light" is not safe either)</h2>
+      <ul>
+        <li>Below-start charges can lodge a bullet in the bore (<b>squib</b>). A weak report or soft recoil means stop immediately and check the bore before firing again.</li>
+        <li>Large cases with very small charges of slow powder can behave unpredictably. Never go below the published starting charge; if you want less velocity than the start load produces, choose a different (faster) powder or lighter bullet with published data in that range.</li>
+      </ul>
+
+      <h2>Bench rules</h2>
+      <ul>
+        <li>One powder container on the bench at a time; return it to the container when done. Never store powder in the measure.</li>
+        <li>No distractions while charging. If you're interrupted, dump the block and start over.</li>
+        <li>Wear eye protection when priming and shooting. Store powder and primers separately, cool and dry.</li>
+      </ul>
+      <p class="tip" id="about-version"></p>
+    </div>
+  </section>
+</main>
+
+<footer class="app">
+  This calculator interpolates published manufacturer load data and is provided as-is, without warranty. Handloading ammunition is inherently dangerous; you assume all risk. Data sources are linked on each load. Velocities are from publishers' test barrels.
+</footer>
+
+<!-- ================= FIRST-RUN ACK ================= -->
+<div class="modal-back" id="ack-back">
+  <div class="modal">
+    <h2>&#9888;&#65039; Read before using</h2>
+    <ul class="ack-list">
+      <li>This tool is a <b>reference calculator</b>. It only interpolates between <b>published</b> starting and maximum loads from powder manufacturers. It is not a substitute for a published reloading manual.</li>
+      <li><b>Cross-check every load against the publisher's current data</b> (each entry links its source) before loading a single round. Transcription errors are possible.</li>
+      <li><b>Always begin at the published starting charge</b> and work up in small steps while watching for pressure signs. Never begin at the calculated charge.</li>
+      <li>Component changes (bullet, case, primer, seating depth) change pressure. Any change &rarr; back to the starting charge.</li>
+      <li>Published velocities are from test barrels; verify yours with a chronograph.</li>
+      <li>You assume all risk. If in doubt, stop and consult the published source.</li>
+    </ul>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-ack">I understand &mdash; I will verify all data against published sources</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= LOG ENTRY MODAL ================= -->
+<div class="modal-back" id="log-back">
+  <div class="modal">
+    <h2>Log a range session</h2>
+    <p class="tip" style="color:var(--ink-2);font-size:13px;margin:0">Record what you actually loaded and what your chronograph and target showed.</p>
+    <div class="formgrid">
+      <div class="full"><label>Load *</label><select id="g-load"></select></div>
+      <div><label>Date</label><input type="text" id="g-date" placeholder="YYYY-MM-DD"></div>
+      <div><label>Charge fired (gr) *</label><input type="number" id="g-charge" step="0.1" min="0"></div>
+      <div><label>Rounds fired</label><input type="number" id="g-rounds" step="1" min="1"></div>
+      <div><label>Temperature (&deg;F)</label><input type="number" id="g-temp" step="1"></div>
+      <div class="full"><label>Chronograph shots (fps, comma-separated) &mdash; or just an average below</label><input type="text" id="g-shots" placeholder="e.g. 2641, 2655, 2648, 2660, 2650"></div>
+      <div><label>Average velocity (fps)</label><input type="number" id="g-avg" step="1" min="0"></div>
+      <div><label>Rifle / barrel</label><input type="text" id="g-rifle" placeholder='e.g. Tikka T3x 22.4"'></div>
+      <div><label>Group size (in)</label><input type="number" id="g-group" step="0.01" min="0"></div>
+      <div><label>Group distance (yd)</label><input type="number" id="g-groupyd" step="1" min="1" value="100"></div>
+      <div class="full"><label>Pressure signs</label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:13px">
+          <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="flattened primers"> flattened primers</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="cratered/pierced primers"> cratered/pierced primers</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="ejector marks"> ejector marks</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="hard extraction"> hard extraction</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="loose primer pockets"> loose primer pockets</label>
+        </div>
+      </div>
+      <div class="full"><label>Notes</label><input type="text" id="g-notes" placeholder="e.g. best group of the ladder, mild recoil"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-save-log">Save</button>
+      <button class="btn" id="btn-cancel-log">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ADD/EDIT LOAD MODAL ================= -->
+<div class="modal-back" id="edit-back">
+  <div class="modal">
+    <h2 id="edit-title">Add load</h2>
+    <p class="tip" style="color:var(--ink-2);font-size:13px;margin:0">Transcribe exactly from a published source &mdash; don't type numbers from memory.</p>
+    <div class="formgrid" id="edit-form">
+      <div><label>Cartridge *</label><input type="text" id="f-cartridge" list="dl-cartridges"><datalist id="dl-cartridges"></datalist></div>
+      <div><label>Powder *</label><input type="text" id="f-powder"></div>
+      <div><label>Bullet weight (gr) *</label><input type="number" id="f-bw" step="0.1" min="1"></div>
+      <div><label>Bullet description *</label><input type="text" id="f-bd" placeholder="e.g. Hornady 124 gr FMJ RN"></div>
+      <div><label>Start charge (gr)</label><input type="number" id="f-sc" step="0.1" min="0"></div>
+      <div><label>Velocity at start (fps)</label><input type="number" id="f-sv" step="1" min="0"></div>
+      <div><label>Max charge (gr) *</label><input type="number" id="f-mc" step="0.1" min="0"></div>
+      <div><label>Velocity at max (fps) *</label><input type="number" id="f-mv" step="1" min="0"></div>
+      <div><label>COAL (in)</label><input type="number" id="f-coal" step="0.001" min="0"></div>
+      <div><label>Primer</label><input type="text" id="f-primer"></div>
+      <div><label>Case</label><input type="text" id="f-case"></div>
+      <div><label>Barrel length (in)</label><input type="number" id="f-bl" step="0.1" min="0"></div>
+      <div><label>Max pressure (as printed)</label><input type="text" id="f-press" placeholder="e.g. 33,200 PSI"></div>
+      <div><label>Source name</label><input type="text" id="f-srcname" placeholder="e.g. Hodgdon Reloading Data Center"></div>
+      <div class="full"><label>Source URL</label><input type="url" id="f-srcurl" placeholder="https://..."></div>
+      <div class="full"><label>Notes</label><input type="text" id="f-notes" placeholder="e.g. maximum is a compressed charge"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-save-load">Save</button>
+      <button class="btn" id="btn-cancel-load">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   BUILT-IN LOAD LIBRARY
+   Seeded from powder manufacturers' free published data. Each entry
+   carries its source URL. verified:"confirmed" means an independent
+   second pass re-fetched the source and matched every number at build
+   time (2026-08). ALWAYS cross-check against the publisher's current
+   data before loading.
+   ===================================================================== */
+const LIBRARY_BUILD_DATE = '2026-08-01'; // v5: 26 cartridges, 130 loads, each independently verified (2026-10-22)
+const BUILTIN_VERSION = 5;
+const BUILTIN_LOADS = [
+/* ---- 9mm Luger ---- */
+{cartridge:'9mm Luger', bulletWeightGr:115, bulletDesc:'Speer 115 gr Gold Dot HP (SPR GDHP)', powder:'CFE Pistol', startChargeGr:5.3, startVelocityFps:1059, maxChargeGr:5.9, maxVelocityFps:1185, maxPressure:'31,800 PSI', coalIn:1.125, primer:'CCI 500, Small Pistol', caseBrand:'Winchester', barrelLengthIn:4, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'9mm Luger', bulletWeightGr:115, bulletDesc:'Speer 115 gr Gold Dot HP (SPR GDHP)', powder:'Titegroup', startChargeGr:3.8, startVelocityFps:944, maxChargeGr:4.3, maxVelocityFps:1095, maxPressure:'33,300 PSI', coalIn:1.125, primer:'CCI 500, Small Pistol', caseBrand:'Winchester', barrelLengthIn:4, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'9mm Luger', bulletWeightGr:124, bulletDesc:'Hornady 124 gr XTP (HDY XTP)', powder:'CFE Pistol', startChargeGr:4.5, startVelocityFps:980, maxChargeGr:5.1, maxVelocityFps:1095, maxPressure:'32,900 PSI', coalIn:1.060, primer:'CCI 500, Small Pistol', caseBrand:'Winchester', barrelLengthIn:4, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'9mm Luger', bulletWeightGr:124, bulletDesc:'Hornady 124 gr XTP (HDY XTP)', powder:'Titegroup', startChargeGr:3.2, startVelocityFps:908, maxChargeGr:3.5, maxVelocityFps:984, maxPressure:'32,800 PSI', coalIn:1.060, primer:'CCI 500, Small Pistol', caseBrand:'Winchester', barrelLengthIn:4, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'9mm Luger', bulletWeightGr:124, bulletDesc:'Alsa Pro 124 gr FMJ', powder:'Vihtavuori N340', startChargeGr:4.6, startVelocityFps:981, maxChargeGr:5.4, maxVelocityFps:1158, coalIn:1.142, primer:'Small Pistol', caseBrand:'Lapua', barrelLengthIn:4, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .45 ACP ---- */
+{cartridge:'.45 ACP', bulletWeightGr:230, bulletDesc:'Hornady 230 gr FMJ FP (HDY FMJ FP, .451")', powder:'CFE Pistol', startChargeGr:6.0, startVelocityFps:815, maxChargeGr:6.8, maxVelocityFps:934, maxPressure:'19,800 PSI', coalIn:1.200, primer:'Federal 150, Large Pistol', caseBrand:'Winchester', barrelLengthIn:5, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.45 ACP', bulletWeightGr:230, bulletDesc:'Hornady 230 gr FMJ FP (HDY FMJ FP, .451")', powder:'Titegroup', startChargeGr:4.4, startVelocityFps:744, maxChargeGr:4.8, maxVelocityFps:818, maxPressure:'16,700 CUP', coalIn:1.200, primer:'Federal 150, Large Pistol', caseBrand:'Winchester', barrelLengthIn:5, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.45 ACP', bulletWeightGr:230, bulletDesc:'Hornady 230 gr FMJ FP (HDY FMJ FP, .451")', powder:'Winchester W231', startChargeGr:4.2, startVelocityFps:751, maxChargeGr:5.3, maxVelocityFps:832, maxPressure:'16,800 CUP', coalIn:1.200, primer:'Federal 150, Large Pistol', caseBrand:'Winchester', barrelLengthIn:5, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.45 ACP', bulletWeightGr:230, bulletDesc:'Sierra 230 gr FMJ', powder:'Vihtavuori N320', startChargeGr:5.1, startVelocityFps:801, maxChargeGr:5.9, maxVelocityFps:922, coalIn:1.268, primer:'Large Pistol', caseBrand:'Remington', barrelLengthIn:5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.45 ACP', bulletWeightGr:230, bulletDesc:'Sierra 230 gr FMJ', powder:'Vihtavuori N340', startChargeGr:6.2, startVelocityFps:850, maxChargeGr:6.9, maxVelocityFps:961, coalIn:1.268, primer:'Large Pistol', caseBrand:'Remington', barrelLengthIn:5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .223 Remington ---- */
+{cartridge:'.223 Remington', bulletWeightGr:55, bulletDesc:'Hornady 55 gr FMJ-BT', powder:'H335', startChargeGr:23.8, startVelocityFps:2975, maxChargeGr:25.9, maxVelocityFps:3250, maxPressure:'53,300 PSI', coalIn:2.200, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.223 Remington', bulletWeightGr:55, bulletDesc:'Hornady 55 gr FMJ-BT', powder:'CFE 223', startChargeGr:26.5, startVelocityFps:3092, maxChargeGr:28.5, maxVelocityFps:3412, maxPressure:'53,400 PSI', coalIn:2.200, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (28.5 gr) as a compressed charge ("28.5C").'},
+{cartridge:'.223 Remington', bulletWeightGr:69, bulletDesc:'Sierra 69 gr HPBT', powder:'Varget', startChargeGr:22.7, startVelocityFps:2674, maxChargeGr:24.7, maxVelocityFps:2919, maxPressure:'53,500 PSI', coalIn:2.245, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (24.7 gr) as a compressed charge ("24.7C").'},
+{cartridge:'.223 Remington', bulletWeightGr:55, bulletDesc:'Hornady 55 gr FMJ-BT', powder:'Vihtavuori N140', startChargeGr:24.7, startVelocityFps:3051, maxChargeGr:26.8, maxVelocityFps:3343, coalIn:2.244, primer:'Small Rifle', caseBrand:'Lapua', barrelLengthIn:25, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Vihtavuori: bolt-action rifle data — for self-loading rifles start low with caution.'},
+{cartridge:'.223 Remington', bulletWeightGr:69, bulletDesc:'Sierra 69 gr HPBT', powder:'Vihtavuori N140', startChargeGr:23.6, startVelocityFps:2690, maxChargeGr:25.9, maxVelocityFps:2943, coalIn:2.244, primer:'Small Rifle', caseBrand:'Lapua', barrelLengthIn:25, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Vihtavuori: bolt-action rifle data — for self-loading rifles start low with caution.'},
+
+/* ---- .308 Winchester ---- */
+{cartridge:'.308 Winchester', bulletWeightGr:168, bulletDesc:'Sierra 168 gr HPBT MatchKing', powder:'Varget', startChargeGr:42.0, startVelocityFps:2520, maxChargeGr:46.0, maxVelocityFps:2731, maxPressure:'50,600 CUP', coalIn:2.800, primer:'Federal 210M, Large Rifle Match', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (46.0 gr) as a compressed charge ("46.0C").'},
+{cartridge:'.308 Winchester', bulletWeightGr:168, bulletDesc:'Sierra 168 gr HPBT MatchKing', powder:'IMR 4064', startChargeGr:41.5, startVelocityFps:2518, maxChargeGr:45.9, maxVelocityFps:2766, maxPressure:'58,800 PSI', coalIn:2.800, primer:'Federal 210M, Large Rifle Match', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (45.9 gr) as a compressed charge ("45.9C").'},
+{cartridge:'.308 Winchester', bulletWeightGr:168, bulletDesc:'Sierra 168 gr HPBT MatchKing', powder:'H4895', startChargeGr:41.0, startVelocityFps:2551, maxChargeGr:43.5, maxVelocityFps:2703, maxPressure:'49,500 CUP', coalIn:2.800, primer:'Federal 210M, Large Rifle Match', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.308 Winchester', bulletWeightGr:168, bulletDesc:'Sierra 168 gr HPBT MatchKing', powder:'CFE 223', startChargeGr:46.6, startVelocityFps:2662, maxChargeGr:49.0, maxVelocityFps:2828, maxPressure:'60,400 PSI', coalIn:2.800, primer:'Federal 210M, Large Rifle Match', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.308 Winchester', bulletWeightGr:168, bulletDesc:'Sierra 168 gr HPBT MatchKing', powder:'Vihtavuori N140', startChargeGr:39.7, startVelocityFps:2428, maxChargeGr:42.9, maxVelocityFps:2631, coalIn:2.795, primer:'Large Rifle', caseBrand:'Lapua', barrelLengthIn:24, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .38 Special ---- */
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'HP-38', startChargeGr:3.8, startVelocityFps:661, maxChargeGr:4.3, maxVelocityFps:779, maxPressure:'15,900 CUP', coalIn:1.455, primer:'Winchester SP, Small Pistol', caseBrand:'Winchester', barrelLengthIn:7.7, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'CFE Pistol', startChargeGr:4.6, startVelocityFps:816, maxChargeGr:5.0, maxVelocityFps:914, maxPressure:'16,200 PSI', coalIn:1.455, primer:'Winchester SP, Small Pistol', caseBrand:'Winchester', barrelLengthIn:7.7, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Titegroup', startChargeGr:3.5, startVelocityFps:704, maxChargeGr:3.9, maxVelocityFps:798, maxPressure:'15,900 CUP', coalIn:1.455, primer:'Winchester SP, Small Pistol', caseBrand:'Winchester', barrelLengthIn:7.7, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Vihtavuori N320', startChargeGr:4.5, startVelocityFps:801, maxChargeGr:5.1, maxVelocityFps:961, coalIn:1.441, primer:'Small Pistol', caseBrand:'Starline', barrelLengthIn:6.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Vihtavuori N340', startChargeGr:5.2, startVelocityFps:856, maxChargeGr:5.8, maxVelocityFps:1017, coalIn:1.441, primer:'Small Pistol', caseBrand:'Starline', barrelLengthIn:6.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- 6.5 Creedmoor ---- */
+{cartridge:'6.5 Creedmoor', bulletWeightGr:140, bulletDesc:'Hornady 140 gr ELD Match', powder:'H4350', startChargeGr:36.0, startVelocityFps:2464, maxChargeGr:40.0, maxVelocityFps:2660, maxPressure:'59,200 PSI', coalIn:2.820, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (40.0 gr) as a compressed charge ("40.0C").'},
+{cartridge:'6.5 Creedmoor', bulletWeightGr:140, bulletDesc:'Hornady 140 gr ELD Match', powder:'Varget', startChargeGr:32.0, startVelocityFps:2371, maxChargeGr:35.8, maxVelocityFps:2598, maxPressure:'59,900 PSI', coalIn:2.820, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'6.5 Creedmoor', bulletWeightGr:140, bulletDesc:'Hornady 140 gr ELD Match', powder:'Winchester StaBALL 6.5', startChargeGr:40.0, startVelocityFps:2535, maxChargeGr:44.0, maxVelocityFps:2806, maxPressure:'61,100 PSI', coalIn:2.820, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'6.5 Creedmoor', bulletWeightGr:140, bulletDesc:'Hornady 140 gr ELD Match', powder:'Vihtavuori N555', startChargeGr:37.8, startVelocityFps:2461, maxChargeGr:42.0, maxVelocityFps:2700, coalIn:2.799, primer:'Small Rifle Magnum (Rem 7 1/2 BR, CCI 450)', caseBrand:'Lapua', barrelLengthIn:25.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Source flags this as a compressed load. Lapua 6.5 CM brass here uses small rifle magnum primers; some 6.5 CM brass has large primer pockets — check your headstamp.'},
+{cartridge:'6.5 Creedmoor', bulletWeightGr:140, bulletDesc:'Hornady 140 gr ELD Match', powder:'Vihtavuori N160', startChargeGr:35.0, startVelocityFps:2336, maxChargeGr:40.9, maxVelocityFps:2618, coalIn:2.799, primer:'Small Rifle Magnum (Rem 7 1/2 BR, CCI 450)', caseBrand:'Lapua', barrelLengthIn:25.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Source flags this as a compressed load. Lapua 6.5 CM brass here uses small rifle magnum primers; some 6.5 CM brass has large primer pockets — check your headstamp.'},
+
+/* ---- .30-06 Springfield ---- */
+{cartridge:'.30-06 Springfield', bulletWeightGr:165, bulletDesc:'Sierra 165 gr SBT (spitzer boat tail)', powder:'H4350', startChargeGr:53, startVelocityFps:2678, maxChargeGr:59, maxVelocityFps:2938, maxPressure:'49,400 CUP', coalIn:3.3, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-06 Springfield', bulletWeightGr:165, bulletDesc:'Sierra 165 gr SBT (spitzer boat tail)', powder:'Varget', startChargeGr:47, startVelocityFps:2726, maxChargeGr:50.5, maxVelocityFps:2873, maxPressure:'49,700 CUP', coalIn:3.3, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-06 Springfield', bulletWeightGr:180, bulletDesc:'Sierra 180 gr SPBT (spitzer boat tail)', powder:'H4350', startChargeGr:52, startVelocityFps:2543, maxChargeGr:57.5, maxVelocityFps:2798, maxPressure:'49,300 CUP', coalIn:3.3, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-06 Springfield', bulletWeightGr:165, bulletDesc:'Sierra 165 gr SBT (spitzer boat tail)', powder:'Vihtavuori N550', startChargeGr:50.5, startVelocityFps:2651, maxChargeGr:54.6, maxVelocityFps:2864, coalIn:3.319, primer:'Large Rifle', caseBrand:'Lapua', barrelLengthIn:24.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.30-06 Springfield', bulletWeightGr:180, bulletDesc:'Nosler 180 gr AccuBond', powder:'Vihtavuori N550', startChargeGr:44, startVelocityFps:2434, maxChargeGr:47.8, maxVelocityFps:2648, coalIn:3.34, primer:'Large Rifle', caseBrand:'Lapua', barrelLengthIn:24.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .300 WSM ---- */
+{cartridge:'.300 WSM', bulletWeightGr:180, bulletDesc:'Swift 180 gr Scirocco', powder:'H4350', startChargeGr:60, startVelocityFps:2799, maxChargeGr:64, maxVelocityFps:2950, maxPressure:'63,900 PSI', coalIn:2.86, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 WSM', bulletWeightGr:180, bulletDesc:'Swift 180 gr Scirocco', powder:'Winchester W760', startChargeGr:59, startVelocityFps:2801, maxChargeGr:62.5, maxVelocityFps:2959, maxPressure:'63,000 PSI', coalIn:2.86, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 WSM', bulletWeightGr:180, bulletDesc:'Nosler 180 gr Partition', powder:'Ramshot Hunter', startChargeGr:62.8, startVelocityFps:2789, maxChargeGr:69.7, maxVelocityFps:2999, maxPressure:'64,800 PSI', coalIn:2.815, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 WSM', bulletWeightGr:180, bulletDesc:'Swift 180 gr Scirocco', powder:'H4831', startChargeGr:65.5, startVelocityFps:2775, maxChargeGr:70, maxVelocityFps:2929, maxPressure:'64,000 PSI', coalIn:2.86, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (70 gr) as a compressed charge.'},
+{cartridge:'.300 WSM', bulletWeightGr:180, bulletDesc:'Berger 180 gr Elite Hunter', powder:'Vihtavuori N560', startChargeGr:64, startVelocityFps:2759, maxChargeGr:68.2, maxVelocityFps:2946, coalIn:2.858, primer:'Large Rifle Magnum', caseBrand:'Lapua', barrelLengthIn:24.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .270 Winchester ---- */
+{cartridge:'.270 Winchester', bulletWeightGr:130, bulletDesc:'Barnes 130 gr TSX BT', powder:'H4350', startChargeGr:51, startVelocityFps:2905, maxChargeGr:55.5, maxVelocityFps:3111, maxPressure:'63,500 PSI', coalIn:3.23, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.270 Winchester', bulletWeightGr:130, bulletDesc:'Hornady 130 gr InterLock', powder:'H4831', startChargeGr:56, startVelocityFps:2843, maxChargeGr:60, maxVelocityFps:3019, maxPressure:'51,000 CUP', coalIn:3.18, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (60 gr) as a compressed charge.'},
+{cartridge:'.270 Winchester', bulletWeightGr:130, bulletDesc:'Remington 130 gr SP', powder:'Vihtavuori N160', startChargeGr:51.5, startVelocityFps:2779, maxChargeGr:58, maxVelocityFps:3083, coalIn:3.228, primer:'Large Rifle', caseBrand:'Remington', barrelLengthIn:24.375, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.270 Winchester', bulletWeightGr:130, bulletDesc:'Speer 130 gr SPBT', powder:'Vihtavuori N165', startChargeGr:54.6, startVelocityFps:2787, maxChargeGr:62, maxVelocityFps:3089, coalIn:3.268, primer:'Large Rifle', caseBrand:'Remington', barrelLengthIn:24.375, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.270 Winchester', bulletWeightGr:130, bulletDesc:'Nosler 130 gr Spitzer (joint AccuBond/BT/Partition sheet)', powder:'H4831SC', startChargeGr:55, startVelocityFps:2903, maxChargeGr:59, maxVelocityFps:3118, coalIn:3.32, primer:'Fed 210', caseBrand:'Nosler', barrelLengthIn:24, sourceName:'Nosler Load Data, 270 Win - 130 grain, Version 9.0 (official PDF)', sourceUrl:'https://www.nosler.com/media/load_data_assets/pdfs/270-Winchester-130gr-version-9-0.pdf', verified:'confirmed', loadNotes:'Nosler publishes this sheet jointly for several 130 gr bullet types (AccuBond, Ballistic Tip, Silvertip, E-Tip, Partition); always begin at the starting load — especially with E-Tip.'},
+
+/* ---- 7mm PRC ---- */
+{cartridge:'7mm PRC', bulletWeightGr:180, bulletDesc:'Hornady 180 gr ELD Match', powder:'H1000', startChargeGr:58.7, startVelocityFps:2676, maxChargeGr:64.6, maxVelocityFps:2925, maxPressure:'62,400 PSI', coalIn:3.29, primer:'Federal 215M, Large Rifle Magnum Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm PRC', bulletWeightGr:180, bulletDesc:'Hornady 180 gr ELD Match', powder:'Retumbo', startChargeGr:60.5, startVelocityFps:2705, maxChargeGr:66.5, maxVelocityFps:2989, maxPressure:'62,300 PSI', coalIn:3.29, primer:'Federal 215M, Large Rifle Magnum Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm PRC', bulletWeightGr:180, bulletDesc:'Hornady 180 gr ELD Match', powder:'IMR 7977', startChargeGr:58, startVelocityFps:2615, maxChargeGr:63.8, maxVelocityFps:2855, maxPressure:'62,500 PSI', coalIn:3.29, primer:'Federal 215M, Large Rifle Magnum Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm PRC', bulletWeightGr:180, bulletDesc:'Hornady 180 gr ELD Match', powder:'Winchester StaBALL HD', startChargeGr:63, startVelocityFps:2672, maxChargeGr:69.2, maxVelocityFps:2930, maxPressure:'62,200 PSI', coalIn:3.29, primer:'Federal 215M, Large Rifle Magnum Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm PRC', bulletWeightGr:180, bulletDesc:'Hornady 180 gr ELD Match', powder:'H4831', startChargeGr:55, startVelocityFps:2664, maxChargeGr:60.6, maxVelocityFps:2881, maxPressure:'62,300 PSI', coalIn:3.29, primer:'Federal 215M, Large Rifle Magnum Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- 7mm Remington Magnum ---- */
+{cartridge:'7mm Remington Magnum', bulletWeightGr:160, bulletDesc:'Nosler 160 gr Partition', powder:'H1000', startChargeGr:63, startVelocityFps:2729, maxChargeGr:66, maxVelocityFps:2839, maxPressure:'49,600 CUP', coalIn:3.29, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm Remington Magnum', bulletWeightGr:160, bulletDesc:'Nosler 160 gr Partition', powder:'Retumbo', startChargeGr:65, startVelocityFps:2756, maxChargeGr:69.5, maxVelocityFps:2915, maxPressure:'49,900 CUP', coalIn:3.29, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (69.5 gr) as a compressed charge.'},
+{cartridge:'7mm Remington Magnum', bulletWeightGr:168, bulletDesc:'Sierra 168 gr HPBT MatchKing', powder:'Ramshot Magnum', startChargeGr:65.6, startVelocityFps:2639, maxChargeGr:72.9, maxVelocityFps:2904, maxPressure:'60,500 PSI', coalIn:3.245, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm Remington Magnum', bulletWeightGr:160, bulletDesc:'Speer 160 gr Grand Slam', powder:'Vihtavuori N560', startChargeGr:60.3, startVelocityFps:2700, maxChargeGr:68.7, maxVelocityFps:3035, coalIn:3.228, primer:'Large Rifle Magnum', caseBrand:'Lapua, trim-to length 63,30 mm (2.492")', barrelLengthIn:24, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'7mm Remington Magnum', bulletWeightGr:175, bulletDesc:'Sierra 175 gr SBT (spitzer boat tail)', powder:'Vihtavuori N165', startChargeGr:52.6, startVelocityFps:2448, maxChargeGr:62.7, maxVelocityFps:2802, coalIn:3.287, primer:'Large Rifle Magnum', caseBrand:'Lapua, trim-to length 63,30 mm (2.492")', barrelLengthIn:24, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .22-250 Remington ---- */
+{cartridge:'.22-250 Remington', bulletWeightGr:55, bulletDesc:'Speer 55 gr SP', powder:'Varget', startChargeGr:34, startVelocityFps:3490, maxChargeGr:36.5, maxVelocityFps:3664, maxPressure:'50,400 CUP', coalIn:2.35, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.22-250 Remington', bulletWeightGr:55, bulletDesc:'Speer 55 gr SP', powder:'H380', startChargeGr:38, startVelocityFps:3507, maxChargeGr:41, maxVelocityFps:3713, maxPressure:'50,700 CUP', coalIn:2.35, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.22-250 Remington', bulletWeightGr:55, bulletDesc:'Speer 55 gr SP', powder:'CFE 223', startChargeGr:36, startVelocityFps:3557, maxChargeGr:39.2, maxVelocityFps:3855, maxPressure:'63,500 PSI', coalIn:2.35, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.22-250 Remington', bulletWeightGr:55, bulletDesc:'Lapua 55 gr FMJ', powder:'Vihtavuori N140', startChargeGr:29.9, startVelocityFps:3146, maxChargeGr:33.5, maxVelocityFps:3445, coalIn:2.346, primer:'Large Rifle', caseBrand:'Lapua .22-250 Remington', barrelLengthIn:22, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.22-250 Remington', bulletWeightGr:55, bulletDesc:'Lapua 55 gr Soft Point', powder:'Vihtavuori N540', startChargeGr:32.3, startVelocityFps:3219, maxChargeGr:35.3, maxVelocityFps:3527, coalIn:2.343, primer:'Large Rifle', caseBrand:'Lapua .22-250 Remington', barrelLengthIn:22, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+
+/* ---- .260 Remington ---- */
+{cartridge:'.260 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'H4350', startChargeGr:39, startVelocityFps:2530, maxChargeGr:42, maxVelocityFps:2677, maxPressure:'58,800 PSI', coalIn:2.78, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.260 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'H4831', startChargeGr:43, startVelocityFps:2568, maxChargeGr:45.7, maxVelocityFps:2686, maxPressure:'59,000 PSI', coalIn:2.78, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.260 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'Varget', startChargeGr:34, startVelocityFps:2469, maxChargeGr:36, maxVelocityFps:2578, maxPressure:'59,400 PSI', coalIn:2.78, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.260 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'Winchester StaBALL 6.5', startChargeGr:36.9, startVelocityFps:2441, maxChargeGr:41.1, maxVelocityFps:2689, maxPressure:'59,700 PSI', coalIn:2.78, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.260 Remington', bulletWeightGr:140, bulletDesc:'Hornady 140 gr BTHP Match', powder:'Vihtavuori N160', startChargeGr:40.1, startVelocityFps:2421, maxChargeGr:44.8, maxVelocityFps:2684, coalIn:2.8, primer:'Large Rifle', caseBrand:'Lapua .260 Remington', barrelLengthIn:24.75, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Source marks the maximum (44.8 gr) as a compressed charge.'},
+
+/* ---- .300 Winchester Magnum ---- */
+{cartridge:'.300 Winchester Magnum', bulletWeightGr:180, bulletDesc:'Speer 180 gr Mag-Tip SP', powder:'H1000', startChargeGr:76, startVelocityFps:2883, maxChargeGr:81, maxVelocityFps:3042, maxPressure:'52,900 CUP', coalIn:3.285, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (81 gr) as a compressed charge.'},
+{cartridge:'.300 Winchester Magnum', bulletWeightGr:180, bulletDesc:'Speer 180 gr Mag-Tip SP', powder:'H4350', startChargeGr:63, startVelocityFps:2787, maxChargeGr:67, maxVelocityFps:2918, maxPressure:'53,100 CUP', coalIn:3.285, primer:'Winchester LRM, Large Rifle Magnum', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 Winchester Magnum', bulletWeightGr:180, bulletDesc:'Nosler 180 gr Ballistic Tip Hunting', powder:'Vihtavuori N560', startChargeGr:68.4, startVelocityFps:2720, maxChargeGr:73.5, maxVelocityFps:2953, coalIn:3.338, primer:'Large Rifle Magnum', caseBrand:'Lapua', barrelLengthIn:24.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.300 Winchester Magnum', bulletWeightGr:180, bulletDesc:'Nosler 180 gr Ballistic Tip Hunting', powder:'Vihtavuori N165', startChargeGr:70.4, startVelocityFps:2710, maxChargeGr:76.4, maxVelocityFps:2940, coalIn:3.338, primer:'Large Rifle Magnum', caseBrand:'Lapua', barrelLengthIn:24.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Source marks the maximum (76.4 gr) as a compressed charge.'},
+{cartridge:'.300 Winchester Magnum', bulletWeightGr:180, bulletDesc:'Nosler 180 gr Spitzer (joint AccuBond/BT sheet)', powder:'IMR 4831', startChargeGr:69, startVelocityFps:2980, maxChargeGr:73, maxVelocityFps:3160, coalIn:3.33, primer:'WLRM', caseBrand:'Nosler', barrelLengthIn:24, sourceName:'Nosler official load data PDF, 300 Win Mag 175/180 grain, Version 9.0', sourceUrl:'https://www.nosler.com/media/load_data_assets/pdfs/300-Win-Mag-180gr-version-9-0.pdf', verified:'confirmed', loadNotes:'Nosler sheet covers 175/180 gr bullet types jointly (AccuBond, Ballistic Tip, etc. at 3.330" OACL); always begin at the starting load.'},
+
+/* ---- .243 Winchester ---- */
+{cartridge:'.243 Winchester', bulletWeightGr:100, bulletDesc:'Speer 100 gr BTSP (boat-tail soft point)', powder:'H4350', startChargeGr:37.0, startVelocityFps:2806, maxChargeGr:40.0, maxVelocityFps:2973, maxPressure:'51,000 CUP', coalIn:2.65, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.243 Winchester', bulletWeightGr:100, bulletDesc:'Speer 100 gr BTSP (boat-tail soft point)', powder:'IMR 4350', startChargeGr:38.5, startVelocityFps:2760, maxChargeGr:42.0, maxVelocityFps:2958, maxPressure:'50,100 CUP', coalIn:2.65, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.243 Winchester', bulletWeightGr:100, bulletDesc:'Speer 100 gr BTSP (boat-tail soft point)', powder:'H414', startChargeGr:37.0, startVelocityFps:2800, maxChargeGr:40.0, maxVelocityFps:2963, maxPressure:'50,600 CUP', coalIn:2.65, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.243 Winchester', bulletWeightGr:100, bulletDesc:'Speer 100 gr BTSP (boat-tail soft point)', powder:'Varget', startChargeGr:31.0, startVelocityFps:2674, maxChargeGr:33.7, maxVelocityFps:2838, maxPressure:'50,400 CUP', coalIn:2.65, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.243 Winchester', bulletWeightGr:100, bulletDesc:'Speer 100 gr BTSP (boat-tail soft point)', powder:'H4895', startChargeGr:31.0, startVelocityFps:2683, maxChargeGr:33.0, maxVelocityFps:2818, maxPressure:'50,100 CUP', coalIn:2.65, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- 7mm-08 Remington ---- */
+{cartridge:'7mm-08 Remington', bulletWeightGr:140, bulletDesc:'Swift 140 gr A-Frame', powder:'H4350', startChargeGr:45.0, startVelocityFps:2692, maxChargeGr:48.0, maxVelocityFps:2868, maxPressure:'49,800 CUP', coalIn:2.75, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (48.0 gr) as a compressed charge.'},
+{cartridge:'7mm-08 Remington', bulletWeightGr:140, bulletDesc:'Swift 140 gr A-Frame', powder:'IMR 4350', startChargeGr:43.7, startVelocityFps:2616, maxChargeGr:46.5, maxVelocityFps:2826, maxPressure:'50,000 CUP', coalIn:2.75, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (46.5 gr) as a compressed charge.'},
+{cartridge:'7mm-08 Remington', bulletWeightGr:140, bulletDesc:'Swift 140 gr A-Frame', powder:'H414', startChargeGr:43.5, startVelocityFps:2624, maxChargeGr:46.0, maxVelocityFps:2791, maxPressure:'49,500 CUP', coalIn:2.75, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm-08 Remington', bulletWeightGr:140, bulletDesc:'Swift 140 gr A-Frame', powder:'Varget', startChargeGr:39.5, startVelocityFps:2695, maxChargeGr:42.2, maxVelocityFps:2819, maxPressure:'49,800 CUP', coalIn:2.75, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'7mm-08 Remington', bulletWeightGr:140, bulletDesc:'Swift 140 gr A-Frame', powder:'H4895', startChargeGr:38.0, startVelocityFps:2618, maxChargeGr:40.5, maxVelocityFps:2769, maxPressure:'49,700 CUP', coalIn:2.75, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .30-30 Winchester ---- */
+{cartridge:'.30-30 Winchester', bulletWeightGr:150, bulletDesc:'Sierra 150 gr FN (flat nose)', powder:'H4895', startChargeGr:30.5, startVelocityFps:2138, maxChargeGr:34.0, maxVelocityFps:2390, maxPressure:'36,700 CUP', coalIn:2.55, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-30 Winchester', bulletWeightGr:150, bulletDesc:'Sierra 150 gr FN (flat nose)', powder:'Varget', startChargeGr:31.0, startVelocityFps:2172, maxChargeGr:34.5, maxVelocityFps:2349, maxPressure:'36,200 CUP', coalIn:2.55, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-30 Winchester', bulletWeightGr:150, bulletDesc:'Sierra 150 gr FN (flat nose)', powder:'H335', startChargeGr:29.7, startVelocityFps:2098, maxChargeGr:33.0, maxVelocityFps:2308, maxPressure:'36,200 CUP', coalIn:2.55, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-30 Winchester', bulletWeightGr:170, bulletDesc:'Sierra 170 gr FN (flat nose)', powder:'H4895', startChargeGr:27.5, startVelocityFps:1947, maxChargeGr:30.5, maxVelocityFps:2138, maxPressure:'35,200 CUP', coalIn:2.52, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.30-30 Winchester', bulletWeightGr:170, bulletDesc:'Sierra 170 gr FN (flat nose)', powder:'H335', startChargeGr:27.5, startVelocityFps:1934, maxChargeGr:30.5, maxVelocityFps:2086, maxPressure:'36,300 CUP', coalIn:2.52, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .35 Remington ---- */
+{cartridge:'.35 Remington', bulletWeightGr:200, bulletDesc:'Hornady 200 gr RN (round nose)', powder:'H4895', startChargeGr:35.0, startVelocityFps:1920, maxChargeGr:38.5, maxVelocityFps:2110, maxPressure:'32,300 CUP', coalIn:2.51, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.35 Remington', bulletWeightGr:200, bulletDesc:'Hornady 200 gr RN (round nose)', powder:'Varget', startChargeGr:36.0, startVelocityFps:1966, maxChargeGr:39.5, maxVelocityFps:2139, maxPressure:'33,300 CUP', coalIn:2.51, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.35 Remington', bulletWeightGr:200, bulletDesc:'Hornady 200 gr RN (round nose)', powder:'BL-C(2)', startChargeGr:38.0, startVelocityFps:1877, maxChargeGr:41.5, maxVelocityFps:2011, maxPressure:'31,700 CUP', coalIn:2.51, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.35 Remington', bulletWeightGr:200, bulletDesc:'Hornady 200 gr RN (round nose)', powder:'H335', startChargeGr:33.0, startVelocityFps:1855, maxChargeGr:37.0, maxVelocityFps:2048, maxPressure:'33,200 CUP', coalIn:2.51, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.35 Remington', bulletWeightGr:200, bulletDesc:'Hornady 200 gr FTX', powder:'Winchester W748', startChargeGr:35.7, startVelocityFps:1815, maxChargeGr:38.0, maxVelocityFps:1913, maxPressure:'31,300 CUP', coalIn:2.54, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .25-06 Remington ---- */
+{cartridge:'.25-06 Remington', bulletWeightGr:120, bulletDesc:'Swift 120 gr A-Frame', powder:'H4350', startChargeGr:44.0, startVelocityFps:2643, maxChargeGr:47.5, maxVelocityFps:2816, maxPressure:'50,900 CUP', coalIn:3.15, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.25-06 Remington', bulletWeightGr:120, bulletDesc:'Swift 120 gr A-Frame', powder:'H4831', startChargeGr:48.0, startVelocityFps:2705, maxChargeGr:51.5, maxVelocityFps:2856, maxPressure:'51,200 CUP', coalIn:3.15, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.25-06 Remington', bulletWeightGr:120, bulletDesc:'Swift 120 gr A-Frame', powder:'Superformance', startChargeGr:46.7, startVelocityFps:2762, maxChargeGr:50.3, maxVelocityFps:2990, maxPressure:'60,900 PSI', coalIn:3.15, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.25-06 Remington', bulletWeightGr:120, bulletDesc:'Swift 120 gr A-Frame', powder:'Varget', startChargeGr:38.0, startVelocityFps:2584, maxChargeGr:41.0, maxVelocityFps:2755, maxPressure:'51,900 CUP', coalIn:3.15, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.25-06 Remington', bulletWeightGr:120, bulletDesc:'Swift 120 gr A-Frame', powder:'H4895', startChargeGr:37.0, startVelocityFps:2541, maxChargeGr:40.0, maxVelocityFps:2694, maxPressure:'51,700 CUP', coalIn:3.15, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .280 Remington ---- */
+{cartridge:'.280 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'H4831', startChargeGr:54.0, startVelocityFps:2732, maxChargeGr:58.5, maxVelocityFps:2927, maxPressure:'48,500 CUP', coalIn:3.23, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.280 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'H4350', startChargeGr:50.0, startVelocityFps:2756, maxChargeGr:53.5, maxVelocityFps:2918, maxPressure:'48,500 CUP', coalIn:3.23, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.280 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'Superformance', startChargeGr:54.0, startVelocityFps:2905, maxChargeGr:57.0, maxVelocityFps:2983, maxPressure:'58,600 PSI', coalIn:3.23, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.280 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'Varget', startChargeGr:42.0, startVelocityFps:2674, maxChargeGr:45.5, maxVelocityFps:2838, maxPressure:'48,100 CUP', coalIn:3.23, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.280 Remington', bulletWeightGr:140, bulletDesc:'Nosler 140 gr Partition', powder:'H4895', startChargeGr:42.0, startVelocityFps:2711, maxChargeGr:45.2, maxVelocityFps:2830, maxPressure:'48,400 CUP', coalIn:3.23, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Remington', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .450 Bushmaster ---- */
+{cartridge:'.450 Bushmaster', bulletWeightGr:250, bulletDesc:'Hornady 250 gr FTX', powder:'H110', startChargeGr:37.3, startVelocityFps:2010, maxChargeGr:41.0, maxVelocityFps:2240, maxPressure:'36,100 PSI', coalIn:2.225, primer:'Winchester SR, Small Rifle', caseBrand:'Starline', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.450 Bushmaster', bulletWeightGr:250, bulletDesc:'Hornady 250 gr FTX', powder:'Lil\'Gun', startChargeGr:35.0, startVelocityFps:2158, maxChargeGr:38.5, maxVelocityFps:2289, maxPressure:'35,900 PSI', coalIn:2.225, primer:'Winchester SR, Small Rifle', caseBrand:'Starline', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.450 Bushmaster', bulletWeightGr:250, bulletDesc:'Hornady 250 gr FTX', powder:'IMR 4227', startChargeGr:34.5, startVelocityFps:1848, maxChargeGr:38.0, maxVelocityFps:2044, maxPressure:'36,400 PSI', coalIn:2.225, primer:'Winchester SR, Small Rifle', caseBrand:'Starline', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.450 Bushmaster', bulletWeightGr:250, bulletDesc:'Nosler 250 gr JHP', powder:'Accurate A1680', startChargeGr:42.2, startVelocityFps:1970, maxChargeGr:46.9, maxVelocityFps:2207, maxPressure:'39,200 PSI', coalIn:2.025, primer:'Winchester SR, Small Rifle', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (46.9 gr) as a compressed charge.'},
+{cartridge:'.450 Bushmaster', bulletWeightGr:250, bulletDesc:'Nosler 250 gr JHP', powder:'Accurate A5744', startChargeGr:35.2, startVelocityFps:1837, maxChargeGr:39.1, maxVelocityFps:2042, maxPressure:'39,800 PSI', coalIn:2.025, primer:'Winchester SR, Small Rifle', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- 6.5 PRC ---- */
+{cartridge:'6.5 PRC', bulletWeightGr:143, bulletDesc:'Hornady 143 gr ELD-X', powder:'US 869', startChargeGr:61.2, startVelocityFps:2643, maxChargeGr:68.0, maxVelocityFps:2982, maxPressure:'58,200 PSI', coalIn:2.945, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (68.0 gr) as a compressed charge.'},
+{cartridge:'6.5 PRC', bulletWeightGr:143, bulletDesc:'Hornady 143 gr ELD-X', powder:'H1000', startChargeGr:51.1, startVelocityFps:2708, maxChargeGr:58.1, maxVelocityFps:2917, maxPressure:'60,200 PSI', coalIn:2.945, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (58.1 gr) as a compressed charge.'},
+{cartridge:'6.5 PRC', bulletWeightGr:143, bulletDesc:'Hornady 143 gr ELD-X', powder:'Ramshot Grand', startChargeGr:53.0, startVelocityFps:2627, maxChargeGr:60.5, maxVelocityFps:2971, maxPressure:'60,100 PSI', coalIn:2.945, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'6.5 PRC', bulletWeightGr:147, bulletDesc:'Hornady 147 gr ELD Match', powder:'Winchester StaBALL HD', startChargeGr:53.0, startVelocityFps:2597, maxChargeGr:59.5, maxVelocityFps:2919, maxPressure:'61,400 PSI', coalIn:2.945, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'6.5 PRC', bulletWeightGr:147, bulletDesc:'Hornady 147 gr ELD Match', powder:'Ramshot Magnum', startChargeGr:55.2, startVelocityFps:2690, maxChargeGr:61.3, maxVelocityFps:2937, maxPressure:'63,000 PSI', coalIn:2.93, primer:'Remington 9 1/2, Large Rifle', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .45-70 Government ---- */
+{cartridge:'.45-70 Government', bulletWeightGr:300, bulletDesc:'Sierra 300 gr HP/FN', powder:'H335', startChargeGr:54.2, startVelocityFps:1848, maxChargeGr:64.2, maxVelocityFps:2173, maxPressure:'27,200 PSI', coalIn:2.525, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Hodgdon "45-70 Government" table: SAAMI-level data (about 28,000 PSI max; formerly labeled "Lever Actions"). NOT for original Trapdoor Springfields or other weak actions — use the Trapdoor-pressure table for those.'},
+{cartridge:'.45-70 Government', bulletWeightGr:300, bulletDesc:'Sierra 300 gr HP/FN', powder:'IMR 4895', startChargeGr:53.6, startVelocityFps:1777, maxChargeGr:61.3, maxVelocityFps:2046, maxPressure:'27,500 PSI', coalIn:2.525, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Hodgdon "45-70 Government" table: SAAMI-level data (about 28,000 PSI max; formerly labeled "Lever Actions"). NOT for original Trapdoor Springfields or other weak actions — use the Trapdoor-pressure table for those.'},
+{cartridge:'.45-70 Government', bulletWeightGr:300, bulletDesc:'Sierra 300 gr HP/FN', powder:'H322', startChargeGr:43.3, startVelocityFps:1720, maxChargeGr:48.1, maxVelocityFps:1959, maxPressure:'27,500 PSI', coalIn:2.525, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Hodgdon "45-70 Government" table: SAAMI-level data (about 28,000 PSI max; formerly labeled "Lever Actions"). NOT for original Trapdoor Springfields or other weak actions — use the Trapdoor-pressure table for those.'},
+{cartridge:'.45-70 Government', bulletWeightGr:300, bulletDesc:'Sierra 300 gr HP/FN', powder:'H4198', startChargeGr:37.2, startVelocityFps:1700, maxChargeGr:43.0, maxVelocityFps:1954, maxPressure:'27,600 PSI', coalIn:2.525, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Hodgdon "45-70 Government" table: SAAMI-level data (about 28,000 PSI max; formerly labeled "Lever Actions"). NOT for original Trapdoor Springfields or other weak actions — use the Trapdoor-pressure table for those.'},
+{cartridge:'.45-70 Government', bulletWeightGr:325, bulletDesc:'Hornady 325 gr FTX', powder:'H335', startChargeGr:49.3, startVelocityFps:1715, maxChargeGr:56.5, maxVelocityFps:1956, maxPressure:'27,700 PSI', coalIn:2.59, primer:'Winchester LR, Large Rifle', caseBrand:'Winchester', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Hodgdon "45-70 Government" table: SAAMI-level data (about 28,000 PSI max; formerly labeled "Lever Actions"). NOT for original Trapdoor Springfields or other weak actions — use the Trapdoor-pressure table for those.'},
+
+/* ---- .350 Legend ---- */
+{cartridge:'.350 Legend', bulletWeightGr:150, bulletDesc:'Winchester 150 gr Deer Season XP', powder:'H110', startChargeGr:22.9, startVelocityFps:2076, maxChargeGr:26.1, maxVelocityFps:2346, maxPressure:'52,100 PSI', coalIn:2.255, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.350 Legend', bulletWeightGr:150, bulletDesc:'Winchester 150 gr Deer Season XP', powder:'Lil\'Gun', startChargeGr:22.5, startVelocityFps:2108, maxChargeGr:28.3, maxVelocityFps:2423, maxPressure:'51,100 PSI', coalIn:2.255, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.350 Legend', bulletWeightGr:165, bulletDesc:'Hornady 165 gr FTX', powder:'H110', startChargeGr:24.3, startVelocityFps:2104, maxChargeGr:27.0, maxVelocityFps:2270, maxPressure:'51,800 PSI', coalIn:2.255, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.350 Legend', bulletWeightGr:170, bulletDesc:'Hornady 170 gr SP', powder:'H110', startChargeGr:24.0, startVelocityFps:2049, maxChargeGr:26.7, maxVelocityFps:2221, maxPressure:'51,600 PSI', coalIn:2.24, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.350 Legend', bulletWeightGr:180, bulletDesc:'Winchester 180 gr Power Point', powder:'H110', startChargeGr:22.0, startVelocityFps:1894, maxChargeGr:24.0, maxVelocityFps:2079, maxPressure:'51,100 PSI', coalIn:2.11, primer:'Winchester SR, Small Rifle', caseBrand:'Winchester', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+
+/* ---- .300 Blackout ---- */
+{cartridge:'.300 Blackout', bulletWeightGr:110, bulletDesc:'Barnes 110 gr TAC-TX', powder:'Lil\'Gun', startChargeGr:19.8, startVelocityFps:2315, maxChargeGr:21.0, maxVelocityFps:2471, maxPressure:'49,800 PSI', coalIn:2.25, primer:'Remington 7 1/2, Small Rifle Magnum', caseBrand:'Hornady', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (21.0 gr) as a compressed charge.'},
+{cartridge:'.300 Blackout', bulletWeightGr:110, bulletDesc:'Hornady 110 gr V-MAX', powder:'H110', startChargeGr:18.4, startVelocityFps:2191, maxChargeGr:19.4, maxVelocityFps:2286, maxPressure:'48,400 PSI', coalIn:2.05, primer:'Remington 7 1/2, Small Rifle Magnum', caseBrand:'Hornady', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 Blackout', bulletWeightGr:115, bulletDesc:'Berger 115 gr FB Target', powder:'H110', startChargeGr:18.3, startVelocityFps:2134, maxChargeGr:20.3, maxVelocityFps:2336, maxPressure:'52,700 PSI', coalIn:2.05, primer:'Remington 7 1/2, Small Rifle Magnum', caseBrand:'Hornady', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 Blackout', bulletWeightGr:125, bulletDesc:'Sierra 125 gr SPT', powder:'Accurate A4100', startChargeGr:16.5, startVelocityFps:2041, maxChargeGr:18.3, maxVelocityFps:2200, maxPressure:'53,500 PSI', coalIn:2.035, primer:'Winchester SR, Small Rifle', caseBrand:'Remington', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
+{cartridge:'.300 Blackout', bulletWeightGr:125, bulletDesc:'Nosler 125 gr Ballistic Tip', powder:'H110', startChargeGr:15.7, startVelocityFps:1921, maxChargeGr:18.5, maxVelocityFps:2205, maxPressure:'52,500 PSI', coalIn:2.06, primer:'Remington 7 1/2, Small Rifle Magnum', caseBrand:'Hornady', barrelLengthIn:16, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (18.5 gr) as a compressed charge.'},
+
+/* ---- .44 Remington Magnum ---- */
+{cartridge:'.44 Remington Magnum', bulletWeightGr:240, bulletDesc:'Hornady 240 gr XTP', powder:'Accurate A5744', startChargeGr:21.6, startVelocityFps:1243, maxChargeGr:24.0, maxVelocityFps:1413, maxPressure:'35,000 PSI', coalIn:1.58, primer:'Winchester LP, Large Pistol', caseBrand:'Remington', barrelLengthIn:8.275, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Revolver test barrel (8.275″ vented).'},
+{cartridge:'.44 Remington Magnum', bulletWeightGr:240, bulletDesc:'Hornady 240 gr XTP', powder:'Accurate A4100', startChargeGr:20.3, startVelocityFps:1303, maxChargeGr:22.5, maxVelocityFps:1472, maxPressure:'35,800 PSI', coalIn:1.6, primer:'Winchester LP, Large Pistol', caseBrand:'Remington', barrelLengthIn:8.275, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Revolver test barrel (8.275″ vented).'},
+{cartridge:'.44 Remington Magnum', bulletWeightGr:240, bulletDesc:'Nosler 240 gr JHP', powder:'H110', startChargeGr:23.0, startVelocityFps:1413, maxChargeGr:24.0, maxVelocityFps:1522, maxPressure:'36,200 CUP', coalIn:1.6, primer:'Remington 2 1/2, Large Pistol', caseBrand:'Winchester', barrelLengthIn:8.275, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Revolver test barrel (8.275″ vented).'},
+{cartridge:'.44 Remington Magnum', bulletWeightGr:240, bulletDesc:'Sierra 240 gr JHC', powder:'Accurate No. 11FS', startChargeGr:19.2, startVelocityFps:1321, maxChargeGr:22.6, maxVelocityFps:1554, maxPressure:'35,700 PSI', coalIn:1.59, primer:'Winchester LP, Large Pistol', caseBrand:'Remington', barrelLengthIn:8.275, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Revolver test barrel (8.275″ vented).'},
+{cartridge:'.44 Remington Magnum', bulletWeightGr:240, bulletDesc:'Nosler 240 gr JHP', powder:'H110 (20″ rifle data)', startChargeGr:23.0, startVelocityFps:1750, maxChargeGr:24.0, maxVelocityFps:1817, maxPressure:'36,200 CUP', coalIn:1.6, primer:'Remington 2 1/2, Large Pistol', caseBrand:'Winchester', barrelLengthIn:20, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Rifle test barrel (20″); same charges as the revolver data, higher velocity.'},
+];
+
+/* ============================ utilities ============================ */
+const $ = (sel) => document.querySelector(sel);
+const isNum = (v) => typeof v === 'number' && isFinite(v);
+const r1 = (v) => Math.round(v * 10) / 10;
+const fmt1 = (v) => { if (!isNum(v)) return '—'; return (Math.abs(v * 10 - Math.round(v * 10)) > 1e-6) ? v.toFixed(2) : v.toFixed(1); };
+const fmt0 = (v) => isNum(v) ? Math.round(v).toLocaleString() : '—';
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function safeUrl(u) {
+  if (typeof u !== 'string') return null;
+  try {
+    const p = new URL(u, location.href);
+    return (p.protocol === 'https:' || p.protocol === 'http:') ? p.href : null;
+  } catch (e) { return null; }
+}
+const onGrid = (v) => Math.abs(v * 10 - Math.round(v * 10)) <= 1e-6; // 0.1 gr resolution
+
+function loadKey(l) {
+  return [l.cartridge, l.bulletWeightGr, l.bulletDesc, l.powder, l.sourceUrl].join('|');
+}
+
+/* ============================ storage ============================ */
+const LS_LIB = 'rc.library.v' + BUILTIN_VERSION;
+const LS_ACK = 'rc.ack.v1';
+
+function seedLibrary() {
+  return BUILTIN_LOADS.map((l, i) => Object.assign({ id: 'b' + i, origin: 'builtin' }, l));
+}
+function sanitizeIds(arr) {
+  const seen = new Set();
+  arr.forEach((l, i) => {
+    if (typeof l.id !== 'string' || !l.id || seen.has(l.id)) l.id = 'fx' + i + '_' + Math.random().toString(36).slice(2, 7);
+    seen.add(l.id);
+  });
+  return arr;
+}
+function loadLibrary() {
+  try {
+    const raw = localStorage.getItem(LS_LIB);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return sanitizeIds(arr);
+    }
+  } catch (e) { /* fall through */ }
+  const seeded = seedLibrary();
+  saveLibrary(seeded);
+  return seeded;
+}
+function saveLibrary(lib) {
+  try {
+    localStorage.setItem(LS_LIB, JSON.stringify(lib));
+    const w = document.getElementById('storage-warn');
+    if (w) w.style.display = 'none';
+    return true;
+  } catch (e) {
+    const w = document.getElementById('storage-warn');
+    if (w) w.style.display = 'block';
+    return false;
+  }
+}
+
+/* ============================ state ============================ */
+function loadSetup() {
+  const def = { barrelIn: null, twist: '', tempF: null, fpsPerInch: 25, fpsPerDegF: 1.0 };
+  try {
+    const raw = localStorage.getItem('rc.setup.v1');
+    if (raw) return Object.assign(def, JSON.parse(raw));
+  } catch (e) {}
+  return def;
+}
+function saveSetup() { try { localStorage.setItem('rc.setup.v1', JSON.stringify(state.setup)); } catch (e) {} }
+
+const state = {
+  lib: loadLibrary(),
+  setup: loadSetup(),
+  cartridge: null,
+  bulletKey: null,     // weight|desc
+  targetVel: null,
+  selectedLoadId: null,
+  editingId: null,
+};
+
+/* Rule-of-thumb estimate of how the user's barrel/temperature shift velocity
+   vs the load's published test conditions. Adjusts EXPECTED velocity only —
+   charges always stay inside the published start–max range. */
+function setupDelta(l) {
+  const s = state.setup; let d = 0;
+  if (isNum(s.barrelIn) && isNum(l.barrelLengthIn)) d += (s.barrelIn - l.barrelLengthIn) * (isNum(s.fpsPerInch) ? s.fpsPerInch : 25);
+  if (isNum(s.tempF)) d += (s.tempF - 70) * (isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0);
+  return Math.round(d);
+}
+function setupActive() { return isNum(state.setup.barrelIn) || isNum(state.setup.tempF); }
+
+/* ============================ calc engine ============================ */
+/*  The engine NEVER extrapolates: a target above the published max
+    velocity is refused; a target below the published start maps to the
+    start charge. Interpolated charges round DOWN to 0.1 gr.            */
+function hasCurve(l) {
+  return isNum(l.startChargeGr) && isNum(l.startVelocityFps) &&
+         isNum(l.maxChargeGr) && isNum(l.maxVelocityFps) &&
+         l.maxChargeGr > l.startChargeGr && l.maxVelocityFps > l.startVelocityFps;
+}
+function calcForLoad(l, target) {
+  if (!isNum(l.maxChargeGr) || !isNum(l.maxVelocityFps)) return { status: 'invalid' };
+  if (!hasCurve(l)) {
+    return { status: 'nocurve', withinMax: isNum(target) && target <= l.maxVelocityFps };
+  }
+  const sc = l.startChargeGr, sv = l.startVelocityFps, mc = l.maxChargeGr, mv = l.maxVelocityFps;
+  if (!isNum(target)) return { status: 'invalid' };
+  if (target > mv) return { status: 'above' };
+  if (target < sv) return { status: 'below', chargeGr: sc, estVel: sv, frac: 0 };
+  const t = (target - sv) / (mv - sv);
+  let charge = sc + t * (mc - sc);
+  charge = Math.floor(charge * 10 + 1e-9) / 10;         // round DOWN, never up
+  if (charge < sc) charge = sc;
+  if (charge > mc) charge = mc;
+  const frac = (charge - sc) / (mc - sc);
+  const estVel = Math.round(sv + frac * (mv - sv));
+  return { status: frac > 0.9 ? 'nearmax' : 'ok', chargeGr: charge, estVel, frac };
+}
+function ladderFor(l, targetCharge) {
+  const sc = l.startChargeGr, mc = l.maxChargeGr;
+  const step = mc < 10 ? 0.2 : (mc < 25 ? 0.3 : 0.5);
+  const fl1 = (v) => Math.floor(v * 10 + 1e-9) / 10;    // round DOWN to 0.1 gr — never up
+  const target = Math.min(targetCharge, mc);
+  const steps = [sc];                                    // exact published start, never rounded
+  let c = sc + step;
+  while (c < target - 1e-9) { steps.push(fl1(c)); c += step; }
+  if (target > sc + 1e-9) steps.push(fl1(target));
+  // de-dupe (target may equal last increment)
+  return steps.filter((v, i) => i === 0 || v > steps[i - 1] + 1e-9);
+}
+function estVelAt(l, charge) {
+  if (!hasCurve(l)) return null;
+  const t = (charge - l.startChargeGr) / (l.maxChargeGr - l.startChargeGr);
+  return Math.round(l.startVelocityFps + t * (l.maxVelocityFps - l.startVelocityFps));
+}
+
+/* ============================ derived lists ============================ */
+function cartridges() {
+  return [...new Set(state.lib.map(l => l.cartridge))].sort();
+}
+function bulletsFor(cart) {
+  const seen = new Map();
+  state.lib.filter(l => l.cartridge === cart).forEach(l => {
+    const k = l.bulletWeightGr + '|' + l.bulletDesc;
+    if (!seen.has(k)) seen.set(k, { key: k, weight: l.bulletWeightGr, desc: l.bulletDesc });
+  });
+  return [...seen.values()].sort((a, b) => a.weight - b.weight || a.desc.localeCompare(b.desc));
+}
+function loadsFor(cart, bulletKey) {
+  return state.lib.filter(l => l.cartridge === cart && (l.bulletWeightGr + '|' + l.bulletDesc) === bulletKey);
+}
+function velRange(loads, deltaFn) {
+  const df = deltaFn || (() => 0);
+  let lo = Infinity, hi = -Infinity;
+  loads.forEach(l => {
+    const d = df(l);
+    if (isNum(l.startVelocityFps)) lo = Math.min(lo, l.startVelocityFps + d);
+    if (isNum(l.maxVelocityFps)) { hi = Math.max(hi, l.maxVelocityFps + d); lo = Math.min(lo, l.maxVelocityFps + d); }
+  });
+  if (!isFinite(lo) || !isFinite(hi)) return null;
+  if (hi <= lo) lo = hi - 10;   // degenerate axis guard (single max-only load)
+  return { lo, hi };            // exact published extremes — never widened
+}
+
+/* ============================ badges ============================ */
+function badgeFor(l) {
+  if (l.origin === 'user') return '<span class="badge userload">your entry</span>';
+  if (l.origin === 'imported') return '<span class="badge unverified" title="Imported from a file — verify against the published source yourself.">&#9888; imported — verify</span>';
+  if (l.verified === 'confirmed') return '<span class="badge verified" title="Independently re-checked against the linked source when this library was built (' + LIBRARY_BUILD_DATE + '). Still verify against current published data.">&#10003; verified ' + LIBRARY_BUILD_DATE.slice(0, 7) + '</span>';
+  return '<span class="badge unverified" title="Could not be independently re-checked — confirm against the linked source before use.">&#9888; unverified</span>';
+}
+function sourceCellHTML(l) {
+  const su = safeUrl(l.sourceUrl);
+  if (su) return '<a href="' + esc(su) + '" target="_blank" rel="noopener">' + esc(l.sourceName || l.sourceUrl) + '</a>';
+  return esc(l.sourceName || l.sourceUrl || '—');
+}
+
+/* ============================ band viz (per result card) ============================ */
+function bandSVG(l, target, axis, d) {
+  // horizontal velocity band on a shared axis; marker at target.
+  // d shifts published velocities to the user's setup estimate (0 = published).
+  d = d || 0;
+  const W = 300, H = 34, padL = 6, padR = 6, y = 17;
+  const x = v => padL + (v - axis.lo) / (axis.hi - axis.lo) * (W - padL - padR);
+  const adj = d !== 0 ? ' (est. your setup)' : '';
+  const sv = isNum(l.startVelocityFps) ? l.startVelocityFps + d : null;
+  const mv = l.maxVelocityFps + d;
+  let bar = '';
+  if (sv != null) {
+    bar = '<line x1="' + x(sv) + '" y1="' + y + '" x2="' + x(mv) + '" y2="' + y + '" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"><title>Published range' + adj + ': ' + fmt0(sv) + '–' + fmt0(mv) + ' fps</title></line>';
+  } else {
+    bar = '<circle cx="' + x(mv) + '" cy="' + y + '" r="4" fill="var(--accent)"><title>Published max' + adj + ': ' + fmt0(mv) + ' fps (no start velocity published)</title></circle>';
+  }
+  const tx = Math.max(padL, Math.min(W - padR, x(target)));
+  const inBand = sv != null && target >= sv && target <= mv;
+  const markColor = target > mv ? 'var(--critical)' : 'var(--ink)';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Velocity range with your target marked">' +
+    '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="var(--grid)" stroke-width="6" stroke-linecap="round"/>' +
+    bar +
+    '<line x1="' + tx + '" y1="4" x2="' + tx + '" y2="30" stroke="' + markColor + '" stroke-width="2"><title>Your target: ' + fmt0(target) + ' fps' + (inBand ? '' : (target > mv ? ' — above published max' : ' — below published start')) + '</title></line>' +
+    '</svg>';
+}
+
+/* ============================ charge/velocity chart (recipe) ============================ */
+function chartSVG(l, calc, points) {
+  if (!hasCurve(l)) return '';
+  points = (points || []).filter(p => isNum(p.chargeGr) && isNum(p.avgFps));
+  const W = 560, H = 300, m = { t: 26, r: 24, b: 44, l: 62 };
+  const sc = l.startChargeGr, mc = l.maxChargeGr, sv = l.startVelocityFps, mv = l.maxVelocityFps;
+  const xpadd = (mc - sc) * 0.08, ypadd = (mv - sv) * 0.12;
+  let x0 = sc - xpadd, x1 = mc + xpadd, y0 = sv - ypadd, y1 = mv + ypadd;
+  points.forEach(p => { x0 = Math.min(x0, p.chargeGr - xpadd); x1 = Math.max(x1, p.chargeGr + xpadd); y0 = Math.min(y0, p.avgFps - ypadd); y1 = Math.max(y1, p.avgFps + ypadd); });
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+  const Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  // clean-ish ticks
+  const xt = [sc, r1((sc + mc) / 2), mc];
+  const ystep = (mv - sv) > 200 ? 100 : ((mv - sv) > 80 ? 50 : 25);
+  const yticks = [];
+  for (let v = Math.ceil(y0 / ystep) * ystep; v <= y1; v += ystep) yticks.push(v);
+
+  let g = '';
+  yticks.forEach(v => {
+    g += '<line x1="' + m.l + '" y1="' + Y(v) + '" x2="' + (W - m.r) + '" y2="' + Y(v) + '" stroke="var(--grid)" stroke-width="1"/>' +
+         '<text x="' + (m.l - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="var(--muted)" style="font-variant-numeric:tabular-nums">' + fmt0(v) + '</text>';
+  });
+  xt.forEach(v => {
+    g += '<text x="' + X(v) + '" y="' + (H - m.b + 18) + '" text-anchor="middle" font-size="11" fill="var(--muted)" style="font-variant-numeric:tabular-nums">' + fmt1(v) + '</text>';
+  });
+
+  const dot = (cx, cy, label, title, anchor, dy) =>
+    '<circle cx="' + cx + '" cy="' + cy + '" r="12" fill="transparent"><title>' + esc(title) + '</title></circle>' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" pointer-events="none"/>' +
+    '<text x="' + cx + '" y="' + (cy + dy) + '" text-anchor="' + anchor + '" font-size="11.5" font-weight="600" fill="var(--ink-2)">' + label + '</text>';
+
+  let targetDot = '';
+  if (calc && isNum(calc.chargeGr) && (calc.status === 'ok' || calc.status === 'nearmax')) {
+    const cx = X(calc.chargeGr), cy = Y(calc.estVel);
+    targetDot =
+      '<circle cx="' + cx + '" cy="' + cy + '" r="14" fill="transparent"><title>Target: ' + fmt1(calc.chargeGr) + ' gr — est. ' + fmt0(calc.estVel) + ' fps</title></circle>' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="7" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" pointer-events="none"/>' +
+      '<text x="' + cx + '" y="' + (cy - 14) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--ink)">target ' + fmt1(calc.chargeGr) + ' gr</text>';
+  }
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Published charge versus velocity for ' + esc(l.powder) + '">' +
+    g +
+    '<line x1="' + m.l + '" y1="' + (H - m.b) + '" x2="' + (W - m.r) + '" y2="' + (H - m.b) + '" stroke="var(--baseline)" stroke-width="1"/>' +
+    '<line x1="' + X(sc) + '" y1="' + Y(sv) + '" x2="' + X(mc) + '" y2="' + Y(mv) + '" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>' +
+    dot(X(sc), Y(sv), 'start ' + fmt1(sc) + ' gr', 'Published start: ' + fmt1(sc) + ' gr — ' + fmt0(sv) + ' fps', 'start', 22) +
+    dot(X(mc), Y(mv), 'MAX ' + fmt1(mc) + ' gr', 'Published maximum: ' + fmt1(mc) + ' gr — ' + fmt0(mv) + ' fps', 'end', -12) +
+    targetDot +
+    points.map(p => '<circle cx="' + X(p.chargeGr) + '" cy="' + Y(p.avgFps) + '" r="12" fill="transparent"><title>Your chrono: ' + fmt1(p.chargeGr) + ' gr — ' + fmt0(p.avgFps) + ' fps' + (p.date ? ' (' + esc(p.date) + ')' : '') + '</title></circle>' +
+      '<circle cx="' + X(p.chargeGr) + '" cy="' + Y(p.avgFps) + '" r="5" fill="var(--surface)" stroke="var(--ink)" stroke-width="2" pointer-events="none"/>').join('') +
+    (points.length ? '<text x="' + (W - m.r) + '" y="' + (m.t - 10) + '" text-anchor="end" font-size="11" fill="var(--ink-2)">— published curve &nbsp; ○ your chronograph</text>' : '') +
+    '<text x="' + (m.l - 46) + '" y="' + (m.t - 10) + '" font-size="11" fill="var(--muted)">fps</text>' +
+    '<text x="' + (W - m.r) + '" y="' + (H - 8) + '" text-anchor="end" font-size="11" fill="var(--muted)">charge (gr)</text>' +
+    '</svg>';
+}
+
+/* ============================ render: picker ============================ */
+function renderCartridges() {
+  const sel = $('#sel-cartridge');
+  const carts = cartridges();
+  sel.innerHTML = carts.length
+    ? carts.map(c => '<option value="' + esc(c) + '"' + (c === state.cartridge ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
+    : '<option value="">— no data in library —</option>';
+  if (!carts.includes(state.cartridge)) state.cartridge = carts[0] || null;
+  sel.value = state.cartridge || '';
+}
+function renderBullets() {
+  const sel = $('#sel-bullet');
+  const bs = state.cartridge ? bulletsFor(state.cartridge) : [];
+  sel.innerHTML = bs.length
+    ? bs.map(b => '<option value="' + esc(b.key) + '"' + (b.key === state.bulletKey ? ' selected' : '') + '>' + b.weight + ' gr — ' + esc(b.desc) + '</option>').join('')
+    : '<option value="">—</option>';
+  if (!bs.some(b => b.key === state.bulletKey)) state.bulletKey = bs.length ? bs[0].key : null;
+  sel.value = state.bulletKey || '';
+  $('#bullet-note').textContent = bs.length
+    ? 'Data is bullet-specific. A different bullet of the same weight = start charge and work up.'
+    : '';
+}
+function renderVelocity() {
+  const loads = (state.cartridge && state.bulletKey) ? loadsFor(state.cartridge, state.bulletKey) : [];
+  const range = velRange(loads, setupDelta);
+  const inp = $('#inp-vel'), rng = $('#rng-vel'), note = $('#vel-note');
+  if (!range) {
+    inp.value = ''; inp.disabled = true; rng.disabled = true;
+    note.textContent = '';
+    return;
+  }
+  inp.disabled = false; rng.disabled = false;
+  inp.min = rng.min = range.lo;
+  inp.max = rng.max = range.hi;
+  if (!isNum(state.targetVel) || state.targetVel < range.lo || state.targetVel > range.hi) {
+    state.targetVel = Math.max(range.lo, Math.min(range.hi, Math.round((range.lo + range.hi) / 2 / 10) * 10));
+  }
+  inp.value = state.targetVel;
+  rng.value = state.targetVel;
+  note.textContent = setupActive()
+    ? 'Est. achievable in your setup: ' + fmt0(range.lo) + '–' + fmt0(range.hi) + ' fps (published data adjusted by your rifle & conditions).'
+    : 'Published data for this bullet spans ' + fmt0(range.lo) + '–' + fmt0(range.hi) + ' fps.';
+}
+
+/* ============================ render: results ============================ */
+function statusHTML(l, c) {
+  switch (c.status) {
+    case 'ok':
+      return '<div class="status-line status-ok"><span class="icon">&#10003;</span><span>Target sits inside the published range (' + Math.round(c.frac * 100) + '% of the start&rarr;max span). Work up from the start charge.</span></div>';
+    case 'nearmax':
+      return '<div class="status-line status-nearmax"><span class="icon">&#9888;</span><span><b>Within ' + Math.round((1 - c.frac) * 100) + '% of the published maximum.</b> Expect pressure signs to gate this before the chronograph does. Work up slowly.</span></div>';
+    case 'below':
+      return '<div class="status-line status-below"><span class="icon">&#9888;</span><span>Target is <b>below the published starting load</b>. Load the start charge (' + fmt1(l.startChargeGr) + ' gr &asymp; ' + fmt0(l.startVelocityFps) + ' fps). Never reduce below start &mdash; squib/erratic-pressure risk.</span></div>';
+    case 'above':
+      return '<div class="status-line status-above"><span class="icon">&#10007;</span><span><b>Exceeds the published maximum</b> (' + fmt0(l.maxVelocityFps) + ' fps at ' + fmt1(l.maxChargeGr) + ' gr). This tool will not compute past a published max. Pick another powder or accept less velocity.</span></div>';
+    case 'nocurve':
+      return '<div class="status-line status-nocurve"><span class="icon">&#9888;</span><span>Source publishes a maximum only' + (l.startRule ? ' (&ldquo;' + esc(l.startRule) + '&rdquo;)' : '') + ' &mdash; no velocity curve to interpolate. Shown for reference.</span></div>';
+    default:
+      return '<div class="status-line status-nocurve"><span class="icon">&#9888;</span><span>Entry is incomplete &mdash; edit it in the Load Library.</span></div>';
+  }
+}
+function renderResults() {
+  const holder = $('#results');
+  const loads = (state.cartridge && state.bulletKey) ? loadsFor(state.cartridge, state.bulletKey) : [];
+  if (!loads.length) {
+    holder.innerHTML = '<div class="card empty-note" style="grid-column:1/-1">No loads in the library yet. Add published data in the <b>Load Library</b> tab, or restore the built-in data.</div>';
+    $('#recipe-holder').innerHTML = '';
+    return;
+  }
+  const target = state.targetVel;
+  const axis = velRange(loads, setupDelta);
+  const rows = loads.map(l => { const d = setupDelta(l); return { l, d, c: calcForLoad(l, target - d) }; });
+  const rank = { ok: 0, nearmax: 1, below: 2, nocurve: 3, above: 4, invalid: 5 };
+  rows.sort((a, b) => (rank[a.c.status] - rank[b.c.status]) || ((a.c.frac ?? 1) - (b.c.frac ?? 1)));
+
+  if (!rows.some(r => r.l.id === state.selectedLoadId)) state.selectedLoadId = null;
+
+  holder.innerHTML = rows.map(({ l, d, c }) => {
+    let tile;
+    if (c.status === 'ok' || c.status === 'nearmax') {
+      const velLine = d !== 0
+        ? 'interpolated &mdash; est. ' + fmt0(c.estVel + d) + ' fps in your setup (' + fmt0(c.estVel) + ' fps in the ' + (isNum(l.barrelLengthIn) ? l.barrelLengthIn + '&Prime; ' : '') + 'test barrel)'
+        : 'interpolated &mdash; est. ' + fmt0(c.estVel) + ' fps in the ' + (isNum(l.barrelLengthIn) ? l.barrelLengthIn + '&Prime; ' : '') + 'test barrel';
+      tile = '<div class="charge-tile"><div class="tile-label">Estimated charge for ' + fmt0(target) + ' fps</div>' +
+        '<div class="tile-value">' + fmt1(c.chargeGr) + ' <span class="unit">gr</span></div>' +
+        '<div class="tile-delta">' + velLine + '</div></div>';
+    } else if (c.status === 'below') {
+      tile = '<div class="charge-tile"><div class="tile-label">Use the starting charge</div>' +
+        '<div class="tile-value">' + fmt1(l.startChargeGr) + ' <span class="unit">gr</span></div>' +
+        '<div class="tile-delta">&asymp; ' + fmt0(l.startVelocityFps) + ' fps published' + (d !== 0 ? ' (&asymp; ' + fmt0(l.startVelocityFps + d) + ' fps in your setup, est.)' : '') + '</div></div>';
+    } else {
+      tile = '<div class="charge-tile"><div class="tile-label">Published maximum</div>' +
+        '<div class="tile-value">' + fmt1(l.maxChargeGr) + ' <span class="unit">gr</span></div>' +
+        '<div class="tile-delta">' + fmt0(l.maxVelocityFps) + ' fps at max' + (d !== 0 ? ' (&asymp; ' + fmt0(l.maxVelocityFps + d) + ' fps in your setup, est.)' : '') + ' &mdash; do not exceed</div></div>';
+    }
+    return '<div class="card load-card' + (l.id === state.selectedLoadId ? ' selected' : '') + '" data-id="' + esc(l.id) + '" role="button" tabindex="0" aria-label="Show recipe for ' + esc(l.powder) + '">' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><h3>' + esc(l.powder) + '</h3>' + badgeFor(l) + '</div>' +
+      '<div class="bullet-line">' + esc(l.bulletDesc) + ' &middot; ' + esc(l.sourceName || 'source') + '</div>' +
+      tile +
+      '<div class="band">' + (axis ? bandSVG(l, target, axis, d) : '') + '</div>' +
+      statusHTML(l, c) +
+      '<div class="startmax-row"><span>start <b>' + fmt1(l.startChargeGr) + ' gr</b>' + (isNum(l.startVelocityFps) ? ' / ' + fmt0(l.startVelocityFps) + ' fps' : '') + '</span>' +
+      '<span>max <b>' + fmt1(l.maxChargeGr) + ' gr</b> / ' + fmt0(l.maxVelocityFps) + ' fps</span></div>' +
+      '</div>';
+  }).join('');
+
+  renderRecipe();
+}
+
+/* ============================ render: recipe ============================ */
+function renderRecipe() {
+  const holder = $('#recipe-holder');
+  const l = state.lib.find(x => x.id === state.selectedLoadId);
+  if (!l) {
+    holder.innerHTML = state.selectedLoadId === null && (state.cartridge && state.bulletKey && loadsFor(state.cartridge, state.bulletKey).length)
+      ? '<p class="empty-note">Select a powder above to see the full recipe and work-up ladder.</p>' : '';
+    return;
+  }
+  const target = state.targetVel;
+  const d = setupDelta(l);
+  const c = calcForLoad(l, target - d);
+  const showLadder = hasCurve(l) && (c.status === 'ok' || c.status === 'nearmax' || c.status === 'below');
+  const ladderTarget = c.status === 'below' ? l.startChargeGr : c.chargeGr;
+
+  let ladderHTML = '';
+  if (showLadder) {
+    const steps = ladderFor(l, ladderTarget);
+    const velHead = d !== 0 ? 'Est. fps (yours / test)' : 'Est. velocity (fps)';
+    ladderHTML = '<h3 style="margin:16px 0 2px;font-size:15px">Work-up ladder</h3>' +
+      '<p class="tip" style="color:var(--ink-2);font-size:13px;margin:0 0 4px">Load 5&ndash;10 rounds per step. Fire lowest first; inspect every case and chronograph each step before moving up. Stop at your target velocity or the first pressure sign &mdash; whichever comes first.</p>' +
+      '<table class="ladder"><thead><tr><th>Step</th><th>Charge (gr)</th><th>' + velHead + '</th><th>% of span</th></tr></thead><tbody>' +
+      steps.map((ch, i) => {
+        const ev = estVelAt(l, ch);
+        const velCell = d !== 0 ? fmt0(ev + d) + ' / ' + fmt0(ev) : fmt0(ev);
+        const frac = (ch - l.startChargeGr) / (l.maxChargeGr - l.startChargeGr);
+        const last = i === steps.length - 1;
+        return '<tr' + (last ? ' class="target-row"' : '') + '><td>' + (i === 0 ? 'start' : (last ? 'target' : i + 1)) + '</td><td>' + fmt1(ch) + '</td><td>' + velCell + '</td><td>' + Math.round(frac * 100) + '%</td></tr>';
+      }).join('') +
+      '</tbody></table>';
+  }
+
+  let setupRow = null;
+  if (setupActive()) {
+    const s = state.setup, parts = [];
+    if (isNum(s.barrelIn)) {
+      if (isNum(l.barrelLengthIn)) {
+        const db = Math.round((s.barrelIn - l.barrelLengthIn) * (isNum(s.fpsPerInch) ? s.fpsPerInch : 25));
+        parts.push((db >= 0 ? '+' : '') + db + ' fps barrel (' + s.barrelIn + '&Prime; vs ' + l.barrelLengthIn + '&Prime; test @ ' + (isNum(s.fpsPerInch) ? s.fpsPerInch : 25) + ' fps/in)');
+      } else {
+        parts.push('barrel adjustment not applied &mdash; no test barrel length published for this load');
+      }
+    }
+    if (isNum(s.tempF)) {
+      const dt = Math.round((s.tempF - 70) * (isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0));
+      parts.push((dt >= 0 ? '+' : '') + dt + ' fps temperature (' + s.tempF + '&deg;F vs 70&deg;F reference @ ' + (isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0) + ' fps/&deg;F)');
+    }
+    setupRow = ['Your setup adjustment', parts.join(' &middot; ') + ' &mdash; rule-of-thumb estimates; chronograph to confirm'];
+  }
+  const twistRow = state.setup.twist
+    ? ['Your twist rate', esc(state.setup.twist) + ' (reference only &mdash; twist affects bullet stability, not charge or pressure; check the bullet maker&rsquo;s minimum twist)']
+    : null;
+
+  const rowsSpec = [
+    ['Cartridge', esc(l.cartridge)],
+    ['Bullet', esc(l.bulletDesc) + ' (' + l.bulletWeightGr + ' gr)'],
+    ['Powder', esc(l.powder)],
+    (c.status === 'ok' || c.status === 'nearmax') ? ['Estimated charge for target', '<b>' + fmt1(c.chargeGr) + ' gr</b> (est. ' + (d !== 0 ? fmt0(c.estVel + d) + ' fps in your setup / ' + fmt0(c.estVel) + ' fps test barrel' : fmt0(c.estVel) + ' fps') + ') — reach it via the ladder, never directly'] : null,
+    setupRow,
+    twistRow,
+    ['Published start', isNum(l.startChargeGr) ? fmt1(l.startChargeGr) + ' gr' + (isNum(l.startVelocityFps) ? ' — ' + fmt0(l.startVelocityFps) + ' fps' : '') : (l.startRule ? '&ldquo;' + esc(l.startRule) + '&rdquo;' : 'not published')],
+    ['Published maximum', '<b>' + fmt1(l.maxChargeGr) + ' gr — ' + fmt0(l.maxVelocityFps) + ' fps</b>' + (l.maxPressure ? ' (' + esc(l.maxPressure) + ')' : '')],
+    ['Cartridge overall length', isNum(l.coalIn) ? l.coalIn.toFixed(3) + '&Prime;' : 'see source'],
+    ['Primer', l.primer ? esc(l.primer) : 'as specified by the source'],
+    ['Case', l.caseBrand ? esc(l.caseBrand) : 'as specified by the source'],
+    ['Test barrel', isNum(l.barrelLengthIn) ? l.barrelLengthIn + '&Prime;' : 'see source'],
+    l.loadNotes ? ['Notes', esc(l.loadNotes)] : null,
+    ['Source', sourceCellHTML(l) + ' ' + badgeFor(l)],
+  ].filter(Boolean);
+
+  holder.innerHTML = '<div class="card recipe" id="recipe-card">' +
+    '<h2>' + esc(l.cartridge) + ' &middot; ' + esc(l.bulletDesc) + ' &middot; ' + esc(l.powder) + '</h2>' +
+    '<p class="recipe-sub">Target ' + fmt0(target) + ' fps' + (d !== 0 ? ' in your setup &asymp; ' + fmt0(target - d) + ' fps test-barrel basis (rule-of-thumb estimate)' : '') + ' &mdash; built from the published load below. Use the exact components listed; any substitution means starting over at the start charge.</p>' +
+    '<div class="recipe-grid"><div>' +
+    '<table class="spec"><tbody>' + rowsSpec.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table>' +
+    ladderHTML +
+    '</div><div class="chart-wrap">' + chartSVG(l, c, logEntriesFor(l)) +
+    '<div class="warnbox"><b>Before you load:</b> open the source link and confirm every number. Start at the start charge. Watch for pressure signs (Safety tab). Velocities are from the publisher’s test barrel &mdash; chronograph your own.</div>' +
+    '</div></div>' +
+    (function () {
+      const entries = logEntriesFor(l);
+      if (!entries.length) return '';
+      return '<h3 style="margin:18px 0 4px;font-size:15px">Your range results for this load</h3><div class="lib-scroll"><table class="lib"><thead><tr><th>Date</th><th>Charge</th><th>Velocity</th><th>Group</th><th>Temp</th><th>Pressure / notes</th><th></th></tr></thead><tbody>' +
+        entries.map(e => logRowHTML(e, false)).join('') + '</tbody></table></div>';
+    })() +
+    '<div class="btn-row"><button class="btn primary" id="btn-print">Print recipe card</button><button class="btn" id="btn-log-this">Log range results</button><button class="btn" id="btn-bal-this">Ballistics for this load</button></div>' +
+    '</div>';
+
+  $('#btn-print')?.addEventListener('click', () => {
+    document.body.classList.add('print-recipe');
+    window.print();
+    setTimeout(() => document.body.classList.remove('print-recipe'), 300);
+  });
+  $('#btn-log-this')?.addEventListener('click', () => openLogEntry({ loadId: l.id, chargeGr: (c.status === 'ok' || c.status === 'nearmax') ? c.chargeGr : l.startChargeGr }));
+  $('#btn-bal-this')?.addEventListener('click', () => { showTab('ballistics'); ballisticsFillFromRecipe(); });
+  holder.querySelectorAll('[data-logedit]').forEach(b => b.addEventListener('click', () => openLogEntry(state.log.find(e => e.id === b.dataset.logedit))));
+  holder.querySelectorAll('[data-logdel]').forEach(b => b.addEventListener('click', () => deleteLogEntry(b.dataset.logdel)));
+}
+function deleteLogEntry(id) {
+  const e = state.log.find(x => x.id === id);
+  if (e && confirm('Delete the ' + (e.date || '') + ' log entry for ' + e.powder + ' ' + fmt1(e.chargeGr) + ' gr?')) {
+    state.log = state.log.filter(x => x.id !== id);
+    saveLog(); renderLog(); renderRecipe();
+  }
+}
+function showTab(name) {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
+
+/* ============================ render: library ============================ */
+function renderLibrary() {
+  const wrap = $('#lib-table-wrap');
+  if (!state.lib.length) {
+    wrap.innerHTML = '<div class="empty-note">Library is empty. Add loads or restore built-in data.</div>';
+    return;
+  }
+  const byCart = {};
+  state.lib.forEach(l => { (byCart[l.cartridge] = byCart[l.cartridge] || []).push(l); });
+  let html = '<table class="lib"><thead><tr><th>Bullet</th><th>Powder</th><th>Start</th><th>Max</th><th>COAL</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody>';
+  Object.keys(byCart).sort().forEach(cart => {
+    html += '<tr class="cart-head"><td colspan="8">' + esc(cart) + '</td></tr>';
+    byCart[cart].sort((a, b) => a.bulletWeightGr - b.bulletWeightGr || a.powder.localeCompare(b.powder)).forEach(l => {
+      html += '<tr>' +
+        '<td>' + l.bulletWeightGr + ' gr ' + esc(l.bulletDesc) + '</td>' +
+        '<td>' + esc(l.powder) + '</td>' +
+        '<td class="num">' + (isNum(l.startChargeGr) ? fmt1(l.startChargeGr) + ' gr' + (isNum(l.startVelocityFps) ? ' / ' + fmt0(l.startVelocityFps) : '') : '—') + '</td>' +
+        '<td class="num">' + fmt1(l.maxChargeGr) + ' gr / ' + fmt0(l.maxVelocityFps) + '</td>' +
+        '<td class="num">' + (isNum(l.coalIn) ? l.coalIn.toFixed(3) + '&Prime;' : '—') + '</td>' +
+        '<td>' + sourceCellHTML(l) + '</td>' +
+        '<td>' + badgeFor(l) + '</td>' +
+        '<td style="white-space:nowrap"><button class="rowbtn" data-edit="' + esc(l.id) + '">edit</button><button class="rowbtn del" data-del="' + esc(l.id) + '">delete</button></td>' +
+        '</tr>';
+    });
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openEdit(b.dataset.edit)));
+  wrap.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    const l = state.lib.find(x => x.id === b.dataset.del);
+    if (l && confirm('Delete ' + l.cartridge + ' / ' + l.powder + ' (' + l.bulletWeightGr + ' gr)?')) {
+      state.lib = state.lib.filter(x => x.id !== b.dataset.del);
+      saveLibrary(state.lib);
+      refreshAll();
+    }
+  }));
+}
+
+/* ============================ add / edit modal ============================ */
+function openEdit(id) {
+  state.editingId = id || null;
+  const l = id ? state.lib.find(x => x.id === id) : null;
+  $('#edit-title').textContent = l ? 'Edit load' : 'Add load';
+  $('#dl-cartridges').innerHTML = cartridges().map(c => '<option value="' + esc(c) + '">').join('');
+  const set = (sel, v) => { $(sel).value = v == null ? '' : v; };
+  set('#f-cartridge', l?.cartridge); set('#f-powder', l?.powder);
+  set('#f-bw', l?.bulletWeightGr); set('#f-bd', l?.bulletDesc);
+  set('#f-sc', l?.startChargeGr); set('#f-sv', l?.startVelocityFps);
+  set('#f-mc', l?.maxChargeGr); set('#f-mv', l?.maxVelocityFps);
+  set('#f-coal', l?.coalIn); set('#f-primer', l?.primer);
+  set('#f-case', l?.caseBrand); set('#f-bl', l?.barrelLengthIn);
+  set('#f-press', l?.maxPressure); set('#f-srcname', l?.sourceName); set('#f-srcurl', l?.sourceUrl);
+  set('#f-notes', l?.loadNotes);
+  $('#edit-back').classList.add('open');
+}
+function validateLoad(rec) {
+  const problems = [];
+  if (!rec.cartridge) problems.push('cartridge is required');
+  if (!rec.powder) problems.push('powder is required');
+  if (!rec.bulletDesc) problems.push('bullet description is required');
+  if (!isNum(rec.bulletWeightGr) || rec.bulletWeightGr <= 0 || rec.bulletWeightGr > 1500) problems.push('bullet weight must be a positive number of grains');
+  if (!isNum(rec.maxChargeGr) || rec.maxChargeGr <= 0 || rec.maxChargeGr > 300) problems.push('max charge must be a positive number of grains');
+  else if (!onGrid(rec.maxChargeGr)) problems.push('max charge must be in 0.1 gr steps, exactly as published');
+  if (!isNum(rec.maxVelocityFps) || rec.maxVelocityFps < 100 || rec.maxVelocityFps > 6000) problems.push('max velocity must be between 100 and 6000 fps');
+  if (isNum(rec.startChargeGr) !== isNum(rec.startVelocityFps)) problems.push('start charge and start velocity must be entered together (both from the published source)');
+  if (isNum(rec.startChargeGr)) {
+    if (rec.startChargeGr <= 0) problems.push('start charge must be positive');
+    else if (!onGrid(rec.startChargeGr)) problems.push('start charge must be in 0.1 gr steps, exactly as published');
+    if (isNum(rec.maxChargeGr) && rec.startChargeGr >= rec.maxChargeGr) problems.push('start charge must be below max charge');
+  }
+  if (isNum(rec.startVelocityFps)) {
+    if (rec.startVelocityFps < 100 || rec.startVelocityFps > 6000) problems.push('start velocity must be between 100 and 6000 fps');
+    if (isNum(rec.maxVelocityFps) && rec.startVelocityFps >= rec.maxVelocityFps) problems.push('start velocity must be below max velocity');
+  }
+  if (isNum(rec.coalIn) && (rec.coalIn <= 0 || rec.coalIn > 6)) problems.push('COAL must be between 0 and 6 inches');
+  if (isNum(rec.barrelLengthIn) && (rec.barrelLengthIn <= 0 || rec.barrelLengthIn > 50)) problems.push('barrel length must be between 0 and 50 inches');
+  if (rec.sourceUrl && !safeUrl(rec.sourceUrl)) problems.push('source URL must be a normal http(s) link');
+  return problems;
+}
+function saveEdit() {
+  const num = (sel) => { const v = parseFloat($(sel).value); return isFinite(v) ? v : undefined; };
+  const str = (sel) => { const v = $(sel).value.replace(/\s+/g, ' ').trim(); return v || undefined; };
+  const rec = {
+    cartridge: str('#f-cartridge'), powder: str('#f-powder'),
+    bulletWeightGr: num('#f-bw'), bulletDesc: str('#f-bd'),
+    startChargeGr: num('#f-sc'), startVelocityFps: num('#f-sv'),
+    maxChargeGr: num('#f-mc'), maxVelocityFps: num('#f-mv'),
+    coalIn: num('#f-coal'), primer: str('#f-primer'),
+    caseBrand: str('#f-case'), barrelLengthIn: num('#f-bl'),
+    maxPressure: str('#f-press'), sourceName: str('#f-srcname'), sourceUrl: str('#f-srcurl'),
+    loadNotes: str('#f-notes'),
+  };
+  const problems = validateLoad(rec);
+  if (problems.length) { alert('Cannot save:\n• ' + problems.join('\n• ')); return; }
+
+  if (state.editingId) {
+    const l = state.lib.find(x => x.id === state.editingId);
+    const wasBuiltin = l.origin === 'builtin';
+    Object.keys(rec).forEach(k => { if (rec[k] === undefined) delete l[k]; else l[k] = rec[k]; });
+    // remove cleared optional fields
+    ['startChargeGr','startVelocityFps','coalIn','primer','caseBrand','barrelLengthIn','maxPressure','sourceName','sourceUrl','loadNotes'].forEach(k => {
+      if (rec[k] === undefined) delete l[k];
+    });
+    if (wasBuiltin) { l.origin = 'user'; delete l.verified; } // edited data is no longer the verified transcription
+  } else {
+    rec.id = 'u' + Math.random().toString(36).slice(2, 9);
+    rec.origin = 'user';
+    state.lib.push(rec);
+  }
+  saveLibrary(state.lib);
+  $('#edit-back').classList.remove('open');
+  refreshAll();
+}
+
+/* ============================ import / export / restore ============================ */
+function exportLibrary() {
+  const blob = new Blob([JSON.stringify(state.lib, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'reloading-library.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+const PROVENANCE_FIELDS = ['cartridge','bulletWeightGr','bulletDesc','powder','startChargeGr','startVelocityFps','startRule','maxChargeGr','maxVelocityFps','maxPressure','coalIn','primer','caseBrand','barrelLengthIn','sourceName','sourceUrl','loadNotes'];
+function matchesBuiltin(l) {
+  return BUILTIN_LOADS.some(b => PROVENANCE_FIELDS.every(k => b[k] === l[k]));
+}
+function importLibrary(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const arr = JSON.parse(reader.result);
+      if (!Array.isArray(arr)) throw new Error('not an array');
+      const cleaned = [];
+      let skipped = 0;
+      arr.forEach(raw => {
+        if (!raw || typeof raw !== 'object') { skipped++; return; }
+        const l = Object.assign({}, raw);
+        if (l.sourceUrl && !safeUrl(l.sourceUrl)) delete l.sourceUrl;
+        if (validateLoad(l).length) { skipped++; return; }
+        // the verified badge is earned, not imported: only entries identical
+        // to the built-in data keep it — anything else must be re-checked
+        if (matchesBuiltin(l)) { l.origin = 'builtin'; l.verified = 'confirmed'; }
+        else { l.origin = (raw.origin === 'user') ? 'user' : 'imported'; delete l.verified; }
+        cleaned.push(l);
+      });
+      if (!cleaned.length) { alert('No valid load entries found in that file.'); return; }
+      const msg = 'Replace your current library (' + state.lib.length + ' loads) with the imported file (' + cleaned.length + ' valid loads' + (skipped ? '; ' + skipped + ' invalid entries skipped' : '') + ')? Export first if unsure.';
+      if (!confirm(msg)) return;
+      cleaned.forEach((l, i) => { l.id = 'imp' + i; });   // never trust file-supplied ids
+      state.lib = cleaned;
+      saveLibrary(state.lib);
+      refreshAll();
+    } catch (e) {
+      alert('Could not read that file as a load-library JSON export.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ============================ load log ============================ */
+const LS_LOG = 'rc.loadlog.v1';
+function loadLog() {
+  try { const raw = localStorage.getItem(LS_LOG); if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) return a; } } catch (e) {}
+  return [];
+}
+function saveLog() { try { localStorage.setItem(LS_LOG, JSON.stringify(state.log)); } catch (e) { const w = document.getElementById('storage-warn'); if (w) w.style.display = 'block'; } }
+state.log = loadLog();
+state.logEditing = null;
+
+function shotStats(shots) {
+  const s = shots.filter(isNum);
+  if (!s.length) return null;
+  const avg = s.reduce((a, b) => a + b, 0) / s.length;
+  const sd = s.length > 1 ? Math.sqrt(s.reduce((a, b) => a + (b - avg) * (b - avg), 0) / (s.length - 1)) : 0;
+  return { n: s.length, avg: Math.round(avg), sd: Math.round(sd * 10) / 10, es: Math.max(...s) - Math.min(...s) };
+}
+function logEntriesFor(l) {
+  // match by id first, then by identity so entries survive library re-seeds
+  return state.log.filter(e => e.loadId === l.id || (e.cartridge === l.cartridge && e.powder === l.powder && e.bulletDesc === l.bulletDesc && e.bulletWeightGr === l.bulletWeightGr))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+}
+function pressureBadge(e) {
+  return (e.pressure && e.pressure.length)
+    ? '<span class="badge unverified" title="' + esc(e.pressure.join(', ')) + '">&#9888; ' + esc(e.pressure.join(', ')) + '</span>'
+    : '<span class="badge verified">&#10003; no pressure signs</span>';
+}
+function logRowHTML(e, showLoad) {
+  return '<tr>' +
+    '<td class="num">' + esc(e.date || '—') + '</td>' +
+    (showLoad ? '<td>' + esc(e.bulletWeightGr + ' gr ' + e.bulletDesc) + '<br><span style="color:var(--ink-2)">' + esc(e.powder) + '</span></td>' : '') +
+    '<td class="num">' + fmt1(e.chargeGr) + ' gr</td>' +
+    '<td class="num">' + (isNum(e.avgFps) ? fmt0(e.avgFps) + (isNum(e.sdFps) && e.n > 1 ? ' <span style="color:var(--ink-2)">SD ' + e.sdFps + ' / ES ' + e.esFps + ' (n=' + e.n + ')</span>' : '') : '—') + '</td>' +
+    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + (e.groupYd || 100) + ' yd' : '—') + '</td>' +
+    '<td class="num">' + (isNum(e.tempF) ? e.tempF + '&deg;F' : '—') + '</td>' +
+    '<td>' + pressureBadge(e) + (e.notes ? '<br><span style="color:var(--ink-2)">' + esc(e.notes) + '</span>' : '') + (e.rifle ? '<br><span style="color:var(--muted);font-size:12px">' + esc(e.rifle) + '</span>' : '') + '</td>' +
+    '<td style="white-space:nowrap"><button class="rowbtn" data-logedit="' + esc(e.id) + '">edit</button><button class="rowbtn del" data-logdel="' + esc(e.id) + '">delete</button></td>' +
+    '</tr>';
+}
+function renderLog() {
+  const wrap = $('#log-table-wrap');
+  if (!wrap) return;
+  if (!state.log.length) { wrap.innerHTML = '<div class="empty-note">No range sessions logged yet. Open a recipe on the Calculator tab and click <b>Log range results</b>, or use the button above.</div>'; return; }
+  const byCart = {};
+  state.log.forEach(e => { (byCart[e.cartridge] = byCart[e.cartridge] || []).push(e); });
+  let html = '<table class="lib"><thead><tr><th>Date</th><th>Load</th><th>Charge</th><th>Velocity</th><th>Group</th><th>Temp</th><th>Pressure / notes</th><th></th></tr></thead><tbody>';
+  Object.keys(byCart).sort().forEach(cart => {
+    html += '<tr class="cart-head"><td colspan="8">' + esc(cart) + '</td></tr>';
+    byCart[cart].sort((a, b) => (b.date || '').localeCompare(a.date || '')).forEach(e => { html += logRowHTML(e, true); });
+  });
+  wrap.innerHTML = html + '</tbody></table>';
+}
+function openLogEntry(prefill) {
+  const e = prefill || {};
+  state.logEditing = e.id || null;
+  const sel = $('#g-load');
+  sel.innerHTML = state.lib.slice().sort((a, b) => a.cartridge.localeCompare(b.cartridge) || a.bulletWeightGr - b.bulletWeightGr || a.powder.localeCompare(b.powder))
+    .map(l => '<option value="' + esc(l.id) + '">' + esc(l.cartridge + ' · ' + l.bulletWeightGr + ' gr ' + l.bulletDesc + ' · ' + l.powder) + '</option>').join('');
+  if (e.loadId) sel.value = e.loadId;
+  const set = (s, v) => { $(s).value = v == null ? '' : v; };
+  set('#g-date', e.date || new Date().toISOString().slice(0, 10));
+  set('#g-charge', e.chargeGr); set('#g-rounds', e.rounds); set('#g-temp', e.tempF ?? (isNum(state.setup.tempF) ? state.setup.tempF : ''));
+  set('#g-shots', e.shots ? e.shots.join(', ') : ''); set('#g-avg', e.shots && e.shots.length ? '' : e.avgFps);
+  set('#g-rifle', e.rifle ?? (isNum(state.setup.barrelIn) ? state.setup.barrelIn + '" barrel' : ''));
+  set('#g-group', e.groupIn); set('#g-groupyd', e.groupYd || 100); set('#g-notes', e.notes);
+  document.querySelectorAll('.g-ps').forEach(cb => { cb.checked = !!(e.pressure && e.pressure.includes(cb.value)); });
+  $('#log-back').classList.add('open');
+}
+function saveLogEntry() {
+  const num = (s) => { const v = parseFloat($(s).value); return isFinite(v) ? v : undefined; };
+  const l = state.lib.find(x => x.id === $('#g-load').value);
+  if (!l) { alert('Pick a load.'); return; }
+  const chargeGr = num('#g-charge');
+  if (!isNum(chargeGr) || chargeGr <= 0) { alert('Enter the charge you actually fired.'); return; }
+  if (chargeGr > l.maxChargeGr + 1e-9) { if (!confirm('That charge is ABOVE the published maximum for this load (' + fmt1(l.maxChargeGr) + ' gr). Log it anyway?')) return; }
+  const shots = $('#g-shots').value.split(/[\s,;]+/).map(parseFloat).filter(isFinite);
+  const st = shotStats(shots);
+  const e = {
+    id: state.logEditing || ('g' + Math.random().toString(36).slice(2, 9)),
+    loadId: l.id, cartridge: l.cartridge, bulletDesc: l.bulletDesc, bulletWeightGr: l.bulletWeightGr, powder: l.powder,
+    date: $('#g-date').value.trim() || undefined,
+    chargeGr, rounds: num('#g-rounds'), tempF: num('#g-temp'),
+    shots: st ? shots : undefined,
+    avgFps: st ? st.avg : num('#g-avg'), sdFps: st ? st.sd : undefined, esFps: st ? st.es : undefined, n: st ? st.n : undefined,
+    rifle: $('#g-rifle').value.trim() || undefined,
+    groupIn: num('#g-group'), groupYd: num('#g-groupyd'),
+    pressure: [...document.querySelectorAll('.g-ps:checked')].map(cb => cb.value),
+    notes: $('#g-notes').value.trim() || undefined,
+  };
+  Object.keys(e).forEach(k => { if (e[k] === undefined) delete e[k]; });
+  const i = state.log.findIndex(x => x.id === e.id);
+  if (i >= 0) state.log[i] = e; else state.log.push(e);
+  saveLog();
+  $('#log-back').classList.remove('open');
+  renderLog(); renderRecipe();
+}
+function exportLog() {
+  const blob = new Blob([JSON.stringify(state.log, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'reloading-log.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+function importLog(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const arr = JSON.parse(reader.result);
+      if (!Array.isArray(arr)) throw new Error();
+      const ok = arr.filter(e => e && typeof e === 'object' && e.cartridge && e.powder && isNum(e.chargeGr));
+      if (!ok.length) { alert('No valid log entries in that file.'); return; }
+      if (!confirm('Merge ' + ok.length + ' log entries into your log (' + state.log.length + ' existing)?')) return;
+      const have = new Set(state.log.map(e => e.id));
+      ok.forEach((e, i) => { if (!e.id || have.has(e.id)) e.id = 'gi' + Date.now().toString(36) + i; state.log.push(e); });
+      saveLog(); renderLog(); renderRecipe();
+    } catch (e) { alert('Could not read that file as a log export.'); }
+  };
+  reader.readAsText(file);
+}
+
+/* ============================ ballistics ============================ */
+/* Standard G1 / G7 drag functions: [Mach, Cd] (McCoy / JBM tables). */
+const G1 = [[0,.2629],[.05,.2558],[.1,.2487],[.15,.2413],[.2,.2344],[.25,.2278],[.3,.2214],[.35,.2155],[.4,.2104],[.45,.2061],[.5,.2032],[.55,.202],[.6,.2034],[.7,.2165],[.725,.223],[.75,.2313],[.775,.2417],[.8,.2546],[.825,.2706],[.85,.2901],[.875,.3136],[.9,.3415],[.925,.3734],[.95,.4084],[.975,.4448],[1,.4805],[1.025,.5136],[1.05,.5427],[1.075,.5677],[1.1,.5883],[1.125,.6053],[1.15,.6191],[1.2,.6393],[1.25,.6518],[1.3,.6589],[1.35,.6621],[1.4,.6625],[1.45,.6607],[1.5,.6573],[1.55,.6528],[1.6,.6474],[1.65,.6413],[1.7,.6347],[1.75,.628],[1.8,.621],[1.85,.6141],[1.9,.6072],[1.95,.6003],[2,.5934],[2.05,.5867],[2.1,.5804],[2.15,.5743],[2.2,.5685],[2.25,.563],[2.3,.5577],[2.35,.5527],[2.4,.5481],[2.45,.5438],[2.5,.5397],[2.6,.5325],[2.7,.5264],[2.8,.5211],[2.9,.5168],[3,.5133],[3.1,.5105],[3.2,.5084],[3.3,.5067],[3.4,.5054],[3.5,.504],[3.6,.503],[3.7,.5022],[3.8,.5016],[3.9,.501],[4,.5006],[4.2,.4998],[4.4,.4995],[4.6,.4992],[4.8,.499],[5,.4988]];
+const G7 = [[0,.1198],[.05,.1197],[.1,.1196],[.15,.1194],[.2,.1193],[.25,.1194],[.3,.1194],[.35,.1194],[.4,.1193],[.45,.1193],[.5,.1194],[.55,.1193],[.6,.1194],[.65,.1197],[.7,.1202],[.725,.1207],[.75,.1215],[.775,.1226],[.8,.1242],[.825,.1266],[.85,.1306],[.875,.1368],[.9,.1464],[.925,.166],[.95,.2054],[.975,.2993],[1,.3803],[1.025,.4015],[1.05,.4043],[1.075,.4034],[1.1,.4014],[1.125,.3987],[1.15,.3955],[1.2,.3884],[1.25,.381],[1.3,.3732],[1.35,.3657],[1.4,.358],[1.5,.344],[1.55,.3376],[1.6,.3315],[1.65,.326],[1.7,.3209],[1.75,.316],[1.8,.3117],[1.85,.3078],[1.9,.3042],[1.95,.301],[2,.298],[2.05,.2951],[2.1,.2922],[2.15,.2892],[2.2,.2864],[2.25,.2835],[2.3,.2807],[2.35,.2779],[2.4,.2752],[2.45,.2725],[2.5,.2697],[2.55,.267],[2.6,.2643],[2.65,.2615],[2.7,.2588],[2.75,.2561],[2.8,.2533],[2.85,.2506],[2.9,.2479],[2.95,.2451],[3,.2424],[3.1,.2368],[3.2,.2313],[3.3,.2258],[3.4,.2205],[3.5,.2154],[3.6,.2106],[3.7,.206],[3.8,.2017],[3.9,.1975],[4,.1935],[4.2,.1861],[4.4,.1793],[4.6,.173],[4.8,.1672],[5,.1618]];
+function dragCd(table, mach) {
+  if (mach <= table[0][0]) return table[0][1];
+  for (let i = 1; i < table.length; i++) {
+    if (mach <= table[i][0]) { const [m0, c0] = table[i - 1], [m1, c1] = table[i]; return c0 + (c1 - c0) * (mach - m0) / (m1 - m0); }
+  }
+  return table[table.length - 1][1];
+}
+/* Point-mass solver (flat fire + small-angle sight correction). Imperial units.
+   Deceleration = 2.0856e-4 · (ρ/ρ₀) · Cd(M) · v² / BC  [ft/s², BC in lb/in²]. */
+function solveTrajectory(p) {
+  const tR = p.tempF + 459.67;
+  const press = isNum(p.pressInHg) ? p.pressInHg : 29.92 * Math.pow(Math.max(0, 1 - 6.8756e-6 * p.altFt), 5.2559);
+  const densRatio = (press / 29.92) * (518.67 / tR);
+  const sos = 49.0223 * Math.sqrt(tR);
+  const k = 2.0856e-4 * densRatio / p.bc;
+  const table = p.model === 'G7' ? G7 : G1;
+  const ranges = [];
+  for (let r = p.stepYd; r <= p.maxYd + 1e-9; r += p.stepYd) ranges.push(r);
+  if (!ranges.includes(p.zeroYd)) ranges.push(p.zeroYd);
+  ranges.sort((a, b) => a - b);
+  const want = ranges.map(r => r * 3), samples = [];
+  let x = 0, y = 0, vx = p.mv, vy = 0, t = 0, wi = 0;
+  const g = 32.174;
+  while (wi < want.length && t < 10) {
+    const v = Math.hypot(vx, vy);
+    const dt = Math.min(0.0005, 0.25 / v);
+    const a = k * dragCd(table, v / sos) * v;        // drag accel magnitude / v
+    const ax = -a * vx, ay = -a * vy - g;
+    const nx = x + vx * dt + 0.5 * ax * dt * dt, ny = y + vy * dt + 0.5 * ay * dt * dt;
+    const nvx = vx + ax * dt, nvy = vy + ay * dt;
+    while (wi < want.length && nx >= want[wi]) {
+      const f = (want[wi] - x) / (nx - x);
+      samples.push({ x: want[wi], y: y + (ny - y) * f, v: Math.hypot(vx + (nvx - vx) * f, vy + (nvy - vy) * f), t: t + dt * f });
+      wi++;
+    }
+    x = nx; y = ny; vx = nvx; vy = nvy; t += dt;
+    if (v < 200) break;
+  }
+  const zs = samples.find(s => Math.abs(s.x - p.zeroYd * 3) < 1e-6);
+  if (!zs) return null;
+  const sightFt = p.sightIn / 12;
+  const tanTheta = (sightFt - zs.y) / zs.x;
+  const windFps = p.windMph * 1.46667 * Math.sin(p.windDeg * Math.PI / 180);
+  return samples.map(s => {
+    const yd = s.x / 3;
+    const dropIn = (s.y + s.x * tanTheta - sightFt) * 12;
+    const driftIn = windFps * (s.t - s.x / p.mv) * 12;
+    const moa = yd > 0 ? 1.047 * yd / 100 : 1;
+    return { yd, dropIn, dropMoa: dropIn / moa, driftIn, driftMoa: driftIn / moa, v: s.v, e: p.weightGr * s.v * s.v / 450436, t: s.t };
+  }).filter(r => r.yd >= p.stepYd - 1e-9 || Math.abs(r.yd - p.zeroYd) < 1e-9);
+}
+const LS_BAL = 'rc.ballistics.v1', LS_BC = 'rc.bc.v1';
+function readBalInputs() {
+  const n = (s, d) => { const v = parseFloat($(s).value); return isFinite(v) ? v : d; };
+  return { mv: n('#b-mv'), bc: n('#b-bc'), model: $('#b-model').value, weightGr: n('#b-wt'), zeroYd: n('#b-zero', 100), sightIn: n('#b-sight', 1.5),
+    maxYd: n('#b-max', 500), stepYd: n('#b-step', 50), windMph: n('#b-wind', 10), windDeg: n('#b-wangle', 90), tempF: n('#b-temp', 59), altFt: n('#b-alt', 0), pressInHg: n('#b-press', undefined), bulletKey: $('#b-bc').dataset.bullet || '' };
+}
+function trajectorySVG(rows) {
+  const W = 560, H = 260, m = { t: 20, r: 20, b: 40, l: 56 };
+  const xs = rows.map(r => r.yd), ys = rows.map(r => r.dropIn);
+  const x0 = 0, x1 = Math.max(...xs), y1 = Math.max(2, ...ys), y0 = Math.min(-2, ...ys);
+  const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const ystep = (y1 - y0) > 60 ? 20 : ((y1 - y0) > 20 ? 10 : 5);
+  let g = '';
+  for (let v = Math.ceil(y0 / ystep) * ystep; v <= y1; v += ystep)
+    g += '<line x1="' + m.l + '" y1="' + Y(v) + '" x2="' + (W - m.r) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? 'var(--baseline)' : 'var(--grid)') + '" stroke-width="1"/><text x="' + (m.l - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="var(--muted)">' + v + '</text>';
+  rows.forEach(r => { g += '<text x="' + X(r.yd) + '" y="' + (H - m.b + 16) + '" text-anchor="middle" font-size="11" fill="var(--muted)">' + r.yd + '</text>'; });
+  const path = 'M' + X(0) + ',' + Y(-parseFloat($('#b-sight').value || 1.5)) + ' ' + rows.map(r => 'L' + X(r.yd) + ',' + Y(r.dropIn)).join(' ');
+  const last = rows[rows.length - 1];
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Bullet drop versus range">' + g +
+    '<path d="' + path + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+    rows.map(r => '<circle cx="' + X(r.yd) + '" cy="' + Y(r.dropIn) + '" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"><title>' + r.yd + ' yd: ' + r.dropIn.toFixed(1) + '″ (' + r.dropMoa.toFixed(1) + ' MOA), ' + fmt0(r.v) + ' fps</title></circle>').join('') +
+    '<text x="' + X(last.yd) + '" y="' + (Y(last.dropIn) - 10) + '" text-anchor="end" font-size="11.5" font-weight="600" fill="var(--ink-2)">' + last.dropIn.toFixed(1) + '″ @ ' + last.yd + '</text>' +
+    '<text x="' + (m.l - 44) + '" y="' + (m.t - 6) + '" font-size="11" fill="var(--muted)">drop (in)</text><text x="' + (W - m.r) + '" y="' + (H - 6) + '" text-anchor="end" font-size="11" fill="var(--muted)">range (yd)</text></svg>';
+}
+function renderBallistics() {
+  const p = readBalInputs();
+  const out = $('#bal-results');
+  const problems = [];
+  if (!isNum(p.mv) || p.mv < 300) problems.push('muzzle velocity');
+  if (!isNum(p.bc) || p.bc <= 0) problems.push('ballistic coefficient');
+  if (!isNum(p.weightGr) || p.weightGr <= 0) problems.push('bullet weight');
+  if (p.zeroYd > p.maxYd) problems.push('zero range must be within max range');
+  if (problems.length) { out.innerHTML = '<p class="empty-note">Enter: ' + problems.join(', ') + '.</p>'; return; }
+  try { localStorage.setItem(LS_BAL, JSON.stringify(p)); if (p.bulletKey) { const m = JSON.parse(localStorage.getItem(LS_BC) || '{}'); m[p.bulletKey] = { bc: p.bc, model: p.model }; localStorage.setItem(LS_BC, JSON.stringify(m)); } } catch (e) {}
+  const rows = solveTrajectory(p);
+  if (!rows) { out.innerHTML = '<p class="empty-note">Could not solve — check the inputs.</p>'; return; }
+  out.innerHTML = '<div class="card"><h2 style="font-size:18px;margin:0 0 4px">Trajectory</h2>' +
+    '<p class="recipe-sub">' + fmt0(p.mv) + ' fps · ' + p.weightGr + ' gr · ' + p.model + ' BC ' + p.bc + ' · ' + p.zeroYd + ' yd zero · ' + p.sightIn + '″ sight height · ' + p.windMph + ' mph wind @ ' + p.windDeg + '° · ' + p.tempF + '°F, ' + fmt0(p.altFt) + ' ft</p>' +
+    '<div class="recipe-grid"><div><table class="ladder"><thead><tr><th>Range (yd)</th><th>Drop (in)</th><th>Drop (MOA)</th><th>Wind (in)</th><th>Wind (MOA)</th><th>Velocity (fps)</th><th>Energy (ft·lb)</th><th>Time (s)</th></tr></thead><tbody>' +
+    rows.map(r => '<tr' + (Math.abs(r.yd - p.zeroYd) < 1e-9 ? ' class="target-row"' : '') + '><td>' + r.yd + '</td><td>' + r.dropIn.toFixed(1) + '</td><td>' + r.dropMoa.toFixed(1) + '</td><td>' + r.driftIn.toFixed(1) + '</td><td>' + r.driftMoa.toFixed(1) + '</td><td>' + fmt0(r.v) + '</td><td>' + fmt0(r.e) + '</td><td>' + r.t.toFixed(3) + '</td></tr>').join('') +
+    '</tbody></table><p class="tip" style="color:var(--ink-2);font-size:12.5px">Negative drop = below line of sight. Wind values are for the crosswind component. Energy is a rough proxy for terminal performance; bullet construction and impact velocity window matter more.</p></div>' +
+    '<div class="chart-wrap">' + trajectorySVG(rows) + '</div></div></div>';
+}
+function ballisticsFillFromRecipe() {
+  const l = state.lib.find(x => x.id === state.selectedLoadId);
+  const note = $('#bal-fill-note');
+  if (!l) { note.textContent = 'Select a powder on the Calculator tab first.'; return; }
+  const d = setupDelta(l);
+  const c = calcForLoad(l, state.targetVel - d);
+  const logged = logEntriesFor(l).filter(e => isNum(e.avgFps)).pop();
+  let mv, src;
+  if (logged) { mv = logged.avgFps; src = 'your logged average (' + fmt0(mv) + ' fps' + (logged.date ? ', ' + logged.date : '') + ')'; }
+  else if (c.status === 'ok' || c.status === 'nearmax') { mv = c.estVel + d; src = 'estimated ' + fmt0(mv) + ' fps' + (d !== 0 ? ' in your setup' : ' (test barrel)'); }
+  else { mv = l.maxVelocityFps + d; src = 'published max ' + fmt0(mv) + ' fps'; }
+  $('#b-mv').value = Math.round(mv);
+  $('#b-wt').value = l.bulletWeightGr;
+  $('#b-bc').dataset.bullet = l.bulletDesc;
+  try { const m = JSON.parse(localStorage.getItem(LS_BC) || '{}'); if (m[l.bulletDesc]) { $('#b-bc').value = m[l.bulletDesc].bc; $('#b-model').value = m[l.bulletDesc].model || 'G1'; } } catch (e) {}
+  if (isNum(state.setup.tempF)) $('#b-temp').value = state.setup.tempF;
+  note.textContent = l.bulletWeightGr + ' gr ' + l.bulletDesc + ' · ' + l.powder + ' — velocity from ' + src + '. Enter the bullet maker’s BC.';
+  if (!$('#b-bc').value) $('#b-bc').focus(); else renderBallistics();
+}
+
+/* ============================ wiring ============================ */
+function renderSetupSummary() {
+  const el = $('#setup-summary');
+  if (!el) return;
+  const s = state.setup, bits = [];
+  if (isNum(s.barrelIn)) bits.push(s.barrelIn + '″ barrel');
+  if (isNum(s.tempF)) bits.push(s.tempF + '°F');
+  if (s.twist) bits.push('twist ' + s.twist);
+  el.textContent = bits.length ? '· ' + bits.join(', ') + ' (adjusting estimates)' : '(optional)';
+}
+function refreshAll() {
+  renderCartridges(); renderBullets(); renderVelocity(); renderResults(); renderLibrary(); renderSetupSummary(); renderLog();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // tabs
+  $('#tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-tab]');
+    if (!btn) return;
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + btn.dataset.tab));
+  });
+
+  // pickers
+  $('#sel-cartridge').addEventListener('change', (e) => {
+    state.cartridge = e.target.value; state.bulletKey = null; state.selectedLoadId = null; state.targetVel = null;
+    renderBullets(); renderVelocity(); renderResults();
+  });
+  $('#sel-bullet').addEventListener('change', (e) => {
+    state.bulletKey = e.target.value; state.selectedLoadId = null; state.targetVel = null;
+    renderVelocity(); renderResults();
+  });
+  const velChange = (v) => {
+    const n = parseFloat(v);
+    if (!isFinite(n)) return;
+    const lo = parseFloat($('#inp-vel').min), hi = parseFloat($('#inp-vel').max);
+    state.targetVel = Math.max(lo, Math.min(hi, n));
+    $('#inp-vel').value = state.targetVel;
+    $('#rng-vel').value = state.targetVel;
+    renderResults();
+  };
+  $('#inp-vel').addEventListener('change', (e) => velChange(e.target.value));
+  $('#rng-vel').addEventListener('input', (e) => velChange(e.target.value));
+
+  // delegated card selection — survives re-renders (a blur-triggered re-render
+  // must not swallow the click that caused it)
+  const openCard = (el) => { state.selectedLoadId = el.dataset.id; renderResults(); };
+  $('#results').addEventListener('click', (e) => {
+    const card = e.target.closest('.load-card');
+    if (card) openCard(card);
+  });
+  $('#results').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.load-card');
+    if (card) { e.preventDefault(); openCard(card); }
+  });
+
+  // rifle & conditions
+  const setupInit = () => {
+    const s = state.setup;
+    $('#s-barrel').value = isNum(s.barrelIn) ? s.barrelIn : '';
+    $('#s-twist').value = s.twist || '';
+    $('#s-temp').value = isNum(s.tempF) ? s.tempF : '';
+    $('#s-fpi').value = isNum(s.fpsPerInch) ? s.fpsPerInch : 25;
+    $('#s-fpd').value = isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0;
+    renderSetupSummary();
+  };
+  const clampNum = (v, lo, hi) => { const n = parseFloat(v); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
+  const setupChanged = () => {
+    state.setup.barrelIn = clampNum($('#s-barrel').value, 1, 50);
+    state.setup.twist = $('#s-twist').value.replace(/\s+/g, ' ').trim().slice(0, 20);
+    state.setup.tempF = clampNum($('#s-temp').value, -40, 130);
+    state.setup.fpsPerInch = clampNum($('#s-fpi').value, 0, 100) ?? 25;
+    state.setup.fpsPerDegF = clampNum($('#s-fpd').value, 0, 5) ?? 1.0;
+    saveSetup();
+    setupInit();
+    renderVelocity(); renderResults();
+  };
+  ['#s-barrel', '#s-twist', '#s-temp', '#s-fpi', '#s-fpd'].forEach(sel => $(sel).addEventListener('change', setupChanged));
+  $('#s-clear').addEventListener('click', () => {
+    state.setup = { barrelIn: null, twist: '', tempF: null, fpsPerInch: 25, fpsPerDegF: 1.0 };
+    saveSetup(); setupInit(); renderVelocity(); renderResults();
+  });
+  setupInit();
+
+  // load log
+  $('#btn-add-log').addEventListener('click', () => openLogEntry(state.selectedLoadId ? { loadId: state.selectedLoadId } : null));
+  $('#btn-save-log').addEventListener('click', saveLogEntry);
+  $('#btn-cancel-log').addEventListener('click', () => $('#log-back').classList.remove('open'));
+  $('#btn-export-log').addEventListener('click', exportLog);
+  $('#btn-import-log').addEventListener('click', () => $('#file-import-log').click());
+  $('#file-import-log').addEventListener('change', (e) => { if (e.target.files[0]) importLog(e.target.files[0]); e.target.value = ''; });
+  $('#log-table-wrap').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-logedit]'), del = e.target.closest('[data-logdel]');
+    if (ed) openLogEntry(state.log.find(x => x.id === ed.dataset.logedit));
+    if (del) deleteLogEntry(del.dataset.logdel);
+  });
+
+  // ballistics
+  $('#btn-bal-calc').addEventListener('click', renderBallistics);
+  $('#btn-bal-fill').addEventListener('click', ballisticsFillFromRecipe);
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_BAL) || 'null');
+    if (saved) {
+      const set = (s, v) => { if (v != null && $(s)) $(s).value = v; };
+      set('#b-mv', saved.mv); set('#b-bc', saved.bc); set('#b-model', saved.model); set('#b-wt', saved.weightGr); set('#b-zero', saved.zeroYd);
+      set('#b-sight', saved.sightIn); set('#b-max', saved.maxYd); set('#b-step', saved.stepYd); set('#b-wind', saved.windMph); set('#b-wangle', saved.windDeg);
+      set('#b-temp', saved.tempF); set('#b-alt', saved.altFt); set('#b-press', saved.pressInHg); if (saved.bulletKey) $('#b-bc').dataset.bullet = saved.bulletKey;
+    }
+  } catch (e) {}
+
+  // library toolbar
+  $('#btn-add-load').addEventListener('click', () => openEdit(null));
+  $('#btn-save-load').addEventListener('click', saveEdit);
+  $('#btn-cancel-load').addEventListener('click', () => $('#edit-back').classList.remove('open'));
+  $('#btn-export').addEventListener('click', exportLibrary);
+  $('#btn-import').addEventListener('click', () => $('#file-import').click());
+  $('#file-import').addEventListener('change', (e) => { if (e.target.files[0]) importLibrary(e.target.files[0]); e.target.value = ''; });
+  $('#btn-restore').addEventListener('click', () => {
+    if (confirm('Replace your current library with the built-in published data set? Your own entries will be removed (export first to keep them).')) {
+      state.lib = seedLibrary();
+      saveLibrary(state.lib);
+      refreshAll();
+    }
+  });
+
+  // first-run acknowledgement
+  let acked = false;
+  try { acked = localStorage.getItem(LS_ACK) === 'yes'; } catch (e) {}
+  if (!acked) $('#ack-back').classList.add('open');
+  $('#btn-ack').addEventListener('click', () => {
+    try { localStorage.setItem(LS_ACK, 'yes'); } catch (e) {}
+    $('#ack-back').classList.remove('open');
+  });
+
+  $('#about-version').textContent = 'Built-in library version ' + BUILTIN_VERSION + ', compiled ' + LIBRARY_BUILD_DATE + ' from publishers’ free online load data. ' + BUILTIN_LOADS.length + ' loads.';
+
+  refreshAll();
+});
+</script>
+</body>
+</html>
