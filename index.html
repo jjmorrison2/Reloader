@@ -1685,13 +1685,12 @@ function normalizeLogEntry(raw) {
   const st = e.shots ? shotStats(e.shots) : null;
   if (st) { e.avgFps = st.avg; e.sdFps = st.sd; e.esFps = st.es; e.n = st.n; }
   else { delete e.shots; delete e.sdFps; delete e.esFps; delete e.n; }
-  // values kept by an earlier pass stay kept unless the field now holds a usable value
+  // values kept by an earlier pass are always carried forward: a field can hold a usable
+  // value AND a kept one (e.g. the readable items of a mixed pressure list), so only the
+  // user changing that field in the edit form clears a kept value (see saveLogEntry)
   const prev = raw._unreadable;
   if (prev && typeof prev === 'object' && !Array.isArray(prev)) {
-    Object.keys(prev).forEach(k => {
-      const usable = k === 'pressure' ? e.pressure.length > 0 : e[k] !== undefined;
-      if (!(k in keep) && !usable) keep[k] = prev[k];
-    });
+    Object.keys(prev).forEach(k => { if (!(k in keep)) keep[k] = prev[k]; });
   }
   if (Object.keys(keep).length) e._unreadable = keep;
   return e;
@@ -1883,13 +1882,16 @@ function saveLogEntry() {
   };
   Object.keys(e).forEach(k => { if (e[k] === undefined) delete e[k]; });
   const i = state.log.findIndex(x => x.id === e.id);
-  // values that could not be read stay with the entry unless this form now supplies them
+  // values that could not be read stay with the entry unless the user changed that
+  // field in this form (a value merely carried over unchanged does not count)
   const old = i >= 0 ? state.log[i] : null;
   if (old && old._unreadable) {
     const kept = {};
     Object.keys(old._unreadable).forEach(f => {
-      const supplied = f === 'pressure' ? e.pressure.length > 0 : e[f] !== undefined;
-      if (!supplied) kept[f] = old._unreadable[f];
+      const changed = f === 'pressure'
+        ? JSON.stringify(e.pressure) !== JSON.stringify(old.pressure || [])
+        : (e[f] !== undefined && e[f] !== old[f]);
+      if (!changed) kept[f] = old._unreadable[f];
     });
     if (Object.keys(kept).length) e._unreadable = kept;
   }
