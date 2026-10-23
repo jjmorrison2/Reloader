@@ -13,15 +13,18 @@ no install, no server, no internet required.
    - a full **recipe card** (components, COAL, primer, case, source link) with a
      **work-up ladder** from the published starting charge to the estimated charge.
 3. A **Load Library** tab lets you add, edit, import, and export load data transcribed from
-   published sources. Your library is saved in the browser (localStorage).
+   published sources. Your library is saved in the browser (localStorage). When a new version
+   of the built-in library ships, your own and imported loads are carried over automatically.
 4. A **Load Log** tab records your range sessions per load — charge fired, chronograph string
    (average/SD/ES computed), group size, temperature, pressure signs, notes. Entries appear on the
-   recipe card and are plotted against the published curve; export/import as JSON.
+   recipe card and are plotted against the published curve; export/import as JSON. A logged
+   charge above the published maximum (or below the published start) is flagged wherever it appears.
 5. A **Ballistics** tab runs a point-mass trajectory (standard G1/G7 drag curves) from your muzzle
    velocity and the bullet maker's BC: drop, MOA, wind drift, velocity, energy, time of flight.
    "Fill from selected recipe" uses your logged average velocity when you have one.
 6. An optional **Your rifle & conditions** panel (barrel length, twist, temperature) applies
    rule-of-thumb estimates (default 25 fps/inch, 1.0 fps/°F vs 70°F) to expected velocity.
+   Barrel length is remembered per cartridge, so a rifle barrel never skews handgun data.
    Your target is converted to each load's test-barrel equivalent before interpolating —
    charges never leave the published range. Twist is reference-only (stability, not pressure).
 

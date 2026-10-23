@@ -70,13 +70,17 @@
 
   nav.tabs {
     max-width: 1100px; margin: 18px auto 0; padding: 0 20px;
-    display: flex; gap: 4px; border-bottom: 1px solid var(--grid);
+    display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--grid);
   }
   nav.tabs button {
     appearance: none; background: none; border: none; cursor: pointer;
     font: inherit; font-weight: 600; font-size: 14px; color: var(--ink-2);
     padding: 9px 14px; border-radius: 8px 8px 0 0;
     border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  @media (max-width: 520px) {
+    nav.tabs { padding: 0 12px; gap: 2px; }
+    nav.tabs button { padding: 8px 9px; font-size: 13.5px; }
   }
   nav.tabs button:hover { color: var(--ink); background: var(--surface); }
   nav.tabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
@@ -145,6 +149,7 @@
   .badge.verified { color: var(--good-text); background: color-mix(in srgb, var(--good) 12%, transparent); }
   .badge.unverified { color: var(--ink); background: color-mix(in srgb, var(--warn) 22%, transparent); }
   .badge.userload { color: var(--ink-2); background: color-mix(in srgb, var(--muted) 18%, transparent); }
+  .badge.danger { color: #fff; background: var(--critical); }
 
   .band { margin-top: 12px; }
   .band svg { display: block; width: 100%; height: 34px; }
@@ -251,19 +256,21 @@
 
 <div class="safety-strip">&#9888;&#65039; Reference tool only &mdash; verify every load against a current published manual. Always start at the published starting charge and work up. Never exceed a published maximum.</div>
 <div id="storage-warn" style="display:none;background:var(--warn);color:#0b0b0b;text-align:center;font-size:13px;font-weight:600;padding:6px 12px">&#9888; This browser is blocking local storage &mdash; changes to your library cannot be saved. Export your library (Load Library tab) before closing this tab.</div>
+<div id="app-notice" role="status" style="display:none;background:var(--accent-soft);color:var(--ink);text-align:center;font-size:13px;font-weight:600;padding:6px 12px"></div>
+<div id="render-error" role="alert" style="display:none;background:var(--critical);color:#fff;text-align:center;font-size:13px;font-weight:600;padding:6px 12px">&#9888; Some of your saved library or log data could not be displayed. Export what you can, then use <b>Restore built-in data</b> on the Load Library tab to recover.</div>
 
 <header class="app">
   <h1>Reloading Calculator</h1>
   <p class="sub">Pick a cartridge, bullet, and target muzzle velocity &mdash; get matching published loads, an estimated charge, and a work-up plan.</p>
 </header>
 
-<nav class="tabs" id="tabs">
-  <button data-tab="calc" class="active">Calculator</button>
-  <button data-tab="log">Load Log</button>
-  <button data-tab="ballistics">Ballistics</button>
-  <button data-tab="library">Load Library</button>
-  <button data-tab="steps">How to Reload</button>
-  <button data-tab="safety">Safety &amp; About</button>
+<nav class="tabs" id="tabs" aria-label="Sections">
+  <button type="button" data-tab="calc" class="active" aria-current="page">Calculator</button>
+  <button type="button" data-tab="log">Load Log</button>
+  <button type="button" data-tab="ballistics">Ballistics</button>
+  <button type="button" data-tab="library">Load Library</button>
+  <button type="button" data-tab="steps">How to Reload</button>
+  <button type="button" data-tab="safety">Safety &amp; About</button>
 </nav>
 
 <main>
@@ -272,18 +279,18 @@
     <div class="card picker-card">
       <div class="picker">
         <div class="field">
-          <label><span class="stepnum">1</span>Cartridge</label>
+          <label for="sel-cartridge"><span class="stepnum">1</span>Cartridge</label>
           <select id="sel-cartridge"></select>
         </div>
         <div class="field">
-          <label><span class="stepnum">2</span>Bullet (exact bullet from published data)</label>
+          <label for="sel-bullet"><span class="stepnum">2</span>Bullet (exact bullet from published data)</label>
           <select id="sel-bullet"></select>
           <div class="velrange-note" id="bullet-note"></div>
         </div>
         <div class="field">
-          <label><span class="stepnum">3</span>Target muzzle velocity (fps)</label>
+          <label for="inp-vel"><span class="stepnum">3</span>Target muzzle velocity (fps)</label>
           <input type="number" id="inp-vel" step="10">
-          <input type="range" id="rng-vel" step="5">
+          <input type="range" id="rng-vel" step="5" aria-label="Target muzzle velocity slider (fps)">
           <div class="velrange-note" id="vel-note"></div>
         </div>
       </div>
@@ -292,14 +299,14 @@
     <details class="card setup-card" id="setup-card">
       <summary>Your rifle &amp; conditions <span class="setup-active" id="setup-summary"></span></summary>
       <div class="setup-grid">
-        <div><label>Your barrel length (in)</label><input type="number" id="s-barrel" step="0.5" min="1" max="50" placeholder="e.g. 22"></div>
-        <div><label>Your twist rate</label><input type="text" id="s-twist" placeholder='e.g. 1:8"'></div>
-        <div><label>Temperature (&deg;F)</label><input type="number" id="s-temp" step="1" min="-40" max="130" placeholder="e.g. 45"></div>
-        <div><label>fps per inch of barrel</label><input type="number" id="s-fpi" step="1" min="0" max="100" placeholder="25"></div>
-        <div><label>fps per &deg;F</label><input type="number" id="s-fpd" step="0.1" min="0" max="5" placeholder="1.0"></div>
+        <div><label for="s-barrel">Your barrel length for <span id="s-barrel-cart">this cartridge</span> (in)</label><input type="number" id="s-barrel" step="0.5" min="1" max="50" placeholder="e.g. 22"></div>
+        <div><label for="s-twist">Your twist rate</label><input type="text" id="s-twist" placeholder='e.g. 1:8"'></div>
+        <div><label for="s-temp">Temperature (&deg;F)</label><input type="number" id="s-temp" step="1" min="-40" max="130" placeholder="e.g. 45"></div>
+        <div><label for="s-fpi">fps per inch of barrel</label><input type="number" id="s-fpi" step="1" min="0" max="100" placeholder="25"></div>
+        <div><label for="s-fpd">fps per &deg;F</label><input type="number" id="s-fpd" step="0.1" min="0" max="5" placeholder="1.0"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn" id="s-clear">Clear</button></div>
       </div>
-      <p class="setup-tip"><b>These are rule-of-thumb estimates, not ballistics.</b> Published velocities come from each load&rsquo;s test barrel; your barrel and temperature shift what <i>you</i> should expect. When set, your target velocity is converted to its test-barrel equivalent before interpolating &mdash; the charge always stays inside the published start&ndash;max range. Defaults: 25 fps/inch (rifle rule of thumb; pistols are lower), 1.0 fps/&deg;F vs a 70&deg;F reference (temp-stable powders like H4350/Varget run lower). Twist is reference-only &mdash; it affects bullet stability, never charge. <b>The chronograph is the truth; work up regardless.</b></p>
+      <p class="setup-tip"><b>These are rule-of-thumb estimates, not ballistics.</b> Published velocities come from each load&rsquo;s test barrel; your barrel and temperature shift what <i>you</i> should expect. Barrel length is remembered separately for each cartridge, so a rifle barrel never skews handgun data. When set, your target velocity is converted to its test-barrel equivalent before interpolating &mdash; the charge always stays inside the published start&ndash;max range. Defaults: 25 fps/inch (rifle rule of thumb; pistols are lower), 1.0 fps/&deg;F vs a 70&deg;F reference (temp-stable powders like H4350/Varget run lower). Twist is reference-only &mdash; it affects bullet stability, never charge. <b>The chronograph is the truth; work up regardless.</b></p>
     </details>
 
     <div class="results" id="results"></div>
@@ -326,19 +333,19 @@
         <span class="tip" style="color:var(--ink-2);font-size:13px;align-self:center" id="bal-fill-note"></span>
       </div>
       <div class="setup-grid">
-        <div><label>Muzzle velocity (fps)</label><input type="number" id="b-mv" step="1" min="300" max="5000" placeholder="e.g. 2650"></div>
-        <div><label>Ballistic coefficient</label><input type="number" id="b-bc" step="0.001" min="0.05" max="1.5" placeholder="e.g. 0.462"></div>
-        <div><label>Drag model</label><select id="b-model"><option value="G1">G1</option><option value="G7">G7</option></select></div>
-        <div><label>Bullet weight (gr)</label><input type="number" id="b-wt" step="1" min="10" max="1000" placeholder="e.g. 168"></div>
-        <div><label>Zero range (yd)</label><input type="number" id="b-zero" step="25" min="10" max="1000" value="100"></div>
-        <div><label>Sight height (in)</label><input type="number" id="b-sight" step="0.1" min="0" max="5" value="1.5"></div>
-        <div><label>Max range (yd)</label><input type="number" id="b-max" step="50" min="100" max="2000" value="500"></div>
-        <div><label>Step (yd)</label><input type="number" id="b-step" step="25" min="25" max="200" value="50"></div>
-        <div><label>Wind (mph)</label><input type="number" id="b-wind" step="1" min="0" max="60" value="10"></div>
-        <div><label>Wind angle (&deg;, 90 = full crosswind)</label><input type="number" id="b-wangle" step="15" min="0" max="180" value="90"></div>
-        <div><label>Temperature (&deg;F)</label><input type="number" id="b-temp" step="1" min="-40" max="130" value="59"></div>
-        <div><label>Altitude (ft)</label><input type="number" id="b-alt" step="100" min="-1000" max="15000" value="0"></div>
-        <div><label>Pressure (inHg, blank = std at altitude)</label><input type="number" id="b-press" step="0.01" min="15" max="35" placeholder="29.92"></div>
+        <div><label for="b-mv">Muzzle velocity (fps)</label><input type="number" id="b-mv" step="1" min="300" max="5000" placeholder="e.g. 2650"></div>
+        <div><label for="b-bc">Ballistic coefficient</label><input type="number" id="b-bc" step="0.001" min="0.05" max="1.5" placeholder="e.g. 0.462"></div>
+        <div><label for="b-model">Drag model</label><select id="b-model"><option value="G1">G1</option><option value="G7">G7</option></select></div>
+        <div><label for="b-wt">Bullet weight (gr)</label><input type="number" id="b-wt" step="1" min="10" max="1000" placeholder="e.g. 168"></div>
+        <div><label for="b-zero">Zero range (yd)</label><input type="number" id="b-zero" step="25" min="10" max="1000" value="100"></div>
+        <div><label for="b-sight">Sight height (in)</label><input type="number" id="b-sight" step="0.1" min="0" max="5" value="1.5"></div>
+        <div><label for="b-max">Max range (yd)</label><input type="number" id="b-max" step="50" min="100" max="2000" value="500"></div>
+        <div><label for="b-step">Step (yd)</label><input type="number" id="b-step" step="25" min="25" max="200" value="50"></div>
+        <div><label for="b-wind">Wind (mph)</label><input type="number" id="b-wind" step="1" min="0" max="60" value="10"></div>
+        <div><label for="b-wangle">Wind angle (&deg;, 90 = full crosswind)</label><input type="number" id="b-wangle" step="15" min="0" max="180" value="90"></div>
+        <div><label for="b-temp">Temperature (&deg;F)</label><input type="number" id="b-temp" step="1" min="-40" max="130" value="59"></div>
+        <div><label for="b-alt">Altitude (ft)</label><input type="number" id="b-alt" step="100" min="-1000" max="15000" value="0"></div>
+        <div><label for="b-press">Pressure (inHg, blank = std at altitude)</label><input type="number" id="b-press" step="0.01" min="15" max="35" placeholder="29.92"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn primary" id="btn-bal-calc">Calculate</button></div>
       </div>
       <p class="setup-tip">Point-mass exterior ballistics using the standard G1/G7 drag curves and your bullet&rsquo;s published BC (get it from the bullet maker &mdash; the load library doesn&rsquo;t store BCs). Wind drift uses the standard lag-time method. Good to a few inches at hunting ranges; it is not a substitute for confirming your drops on paper.</p>
@@ -444,8 +451,8 @@
 
 <!-- ================= FIRST-RUN ACK ================= -->
 <div class="modal-back" id="ack-back">
-  <div class="modal">
-    <h2>&#9888;&#65039; Read before using</h2>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ack-title">
+    <h2 id="ack-title">&#9888;&#65039; Read before using</h2>
     <ul class="ack-list">
       <li>This tool is a <b>reference calculator</b>. It only interpolates between <b>published</b> starting and maximum loads from powder manufacturers. It is not a substitute for a published reloading manual.</li>
       <li><b>Cross-check every load against the publisher's current data</b> (each entry links its source) before loading a single round. Transcription errors are possible.</li>
@@ -462,22 +469,22 @@
 
 <!-- ================= LOG ENTRY MODAL ================= -->
 <div class="modal-back" id="log-back">
-  <div class="modal">
-    <h2>Log a range session</h2>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="log-title">
+    <h2 id="log-title">Log a range session</h2>
     <p class="tip" style="color:var(--ink-2);font-size:13px;margin:0">Record what you actually loaded and what your chronograph and target showed.</p>
     <div class="formgrid">
-      <div class="full"><label>Load *</label><select id="g-load"></select></div>
-      <div><label>Date</label><input type="text" id="g-date" placeholder="YYYY-MM-DD"></div>
-      <div><label>Charge fired (gr) *</label><input type="number" id="g-charge" step="0.1" min="0"></div>
-      <div><label>Rounds fired</label><input type="number" id="g-rounds" step="1" min="1"></div>
-      <div><label>Temperature (&deg;F)</label><input type="number" id="g-temp" step="1"></div>
-      <div class="full"><label>Chronograph shots (fps, comma-separated) &mdash; or just an average below</label><input type="text" id="g-shots" placeholder="e.g. 2641, 2655, 2648, 2660, 2650"></div>
-      <div><label>Average velocity (fps)</label><input type="number" id="g-avg" step="1" min="0"></div>
-      <div><label>Rifle / barrel</label><input type="text" id="g-rifle" placeholder='e.g. Tikka T3x 22.4"'></div>
-      <div><label>Group size (in)</label><input type="number" id="g-group" step="0.01" min="0"></div>
-      <div><label>Group distance (yd)</label><input type="number" id="g-groupyd" step="1" min="1" value="100"></div>
-      <div class="full"><label>Pressure signs</label>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:13px">
+      <div class="full"><label for="g-load">Load *</label><select id="g-load"></select></div>
+      <div><label for="g-date">Date</label><input type="text" id="g-date" placeholder="YYYY-MM-DD"></div>
+      <div><label for="g-charge">Charge fired (gr) *</label><input type="number" id="g-charge" step="0.1" min="0"></div>
+      <div><label for="g-rounds">Rounds fired</label><input type="number" id="g-rounds" step="1" min="1"></div>
+      <div><label for="g-temp">Temperature (&deg;F)</label><input type="number" id="g-temp" step="1"></div>
+      <div class="full"><label for="g-shots">Chronograph shots (fps, comma-separated) &mdash; or just an average below</label><input type="text" id="g-shots" placeholder="e.g. 2641, 2655, 2648, 2660, 2650"></div>
+      <div><label for="g-avg">Average velocity (fps)</label><input type="number" id="g-avg" step="1" min="0"></div>
+      <div><label for="g-rifle">Rifle / barrel</label><input type="text" id="g-rifle" placeholder='e.g. Tikka T3x 22.4"'></div>
+      <div><label for="g-group">Group size (in)</label><input type="number" id="g-group" step="0.01" min="0"></div>
+      <div><label for="g-groupyd">Group distance (yd)</label><input type="number" id="g-groupyd" step="1" min="1" value="100"></div>
+      <div class="full"><label id="g-ps-label">Pressure signs</label>
+        <div role="group" aria-labelledby="g-ps-label" style="display:flex;flex-wrap:wrap;gap:10px;font-size:13px">
           <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="flattened primers"> flattened primers</label>
           <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="cratered/pierced primers"> cratered/pierced primers</label>
           <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="ejector marks"> ejector marks</label>
@@ -485,7 +492,7 @@
           <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="loose primer pockets"> loose primer pockets</label>
         </div>
       </div>
-      <div class="full"><label>Notes</label><input type="text" id="g-notes" placeholder="e.g. best group of the ladder, mild recoil"></div>
+      <div class="full"><label for="g-notes">Notes</label><input type="text" id="g-notes" placeholder="e.g. best group of the ladder, mild recoil"></div>
     </div>
     <div class="btn-row">
       <button class="btn primary" id="btn-save-log">Save</button>
@@ -496,26 +503,26 @@
 
 <!-- ================= ADD/EDIT LOAD MODAL ================= -->
 <div class="modal-back" id="edit-back">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
     <h2 id="edit-title">Add load</h2>
     <p class="tip" style="color:var(--ink-2);font-size:13px;margin:0">Transcribe exactly from a published source &mdash; don't type numbers from memory.</p>
     <div class="formgrid" id="edit-form">
-      <div><label>Cartridge *</label><input type="text" id="f-cartridge" list="dl-cartridges"><datalist id="dl-cartridges"></datalist></div>
-      <div><label>Powder *</label><input type="text" id="f-powder"></div>
-      <div><label>Bullet weight (gr) *</label><input type="number" id="f-bw" step="0.1" min="1"></div>
-      <div><label>Bullet description *</label><input type="text" id="f-bd" placeholder="e.g. Hornady 124 gr FMJ RN"></div>
-      <div><label>Start charge (gr)</label><input type="number" id="f-sc" step="0.1" min="0"></div>
-      <div><label>Velocity at start (fps)</label><input type="number" id="f-sv" step="1" min="0"></div>
-      <div><label>Max charge (gr) *</label><input type="number" id="f-mc" step="0.1" min="0"></div>
-      <div><label>Velocity at max (fps) *</label><input type="number" id="f-mv" step="1" min="0"></div>
-      <div><label>COAL (in)</label><input type="number" id="f-coal" step="0.001" min="0"></div>
-      <div><label>Primer</label><input type="text" id="f-primer"></div>
-      <div><label>Case</label><input type="text" id="f-case"></div>
-      <div><label>Barrel length (in)</label><input type="number" id="f-bl" step="0.1" min="0"></div>
-      <div><label>Max pressure (as printed)</label><input type="text" id="f-press" placeholder="e.g. 33,200 PSI"></div>
-      <div><label>Source name</label><input type="text" id="f-srcname" placeholder="e.g. Hodgdon Reloading Data Center"></div>
-      <div class="full"><label>Source URL</label><input type="url" id="f-srcurl" placeholder="https://..."></div>
-      <div class="full"><label>Notes</label><input type="text" id="f-notes" placeholder="e.g. maximum is a compressed charge"></div>
+      <div><label for="f-cartridge">Cartridge *</label><input type="text" id="f-cartridge" list="dl-cartridges"><datalist id="dl-cartridges"></datalist></div>
+      <div><label for="f-powder">Powder *</label><input type="text" id="f-powder"></div>
+      <div><label for="f-bw">Bullet weight (gr) *</label><input type="number" id="f-bw" step="0.1" min="1"></div>
+      <div><label for="f-bd">Bullet description *</label><input type="text" id="f-bd" placeholder="e.g. Hornady 124 gr FMJ RN"></div>
+      <div><label for="f-sc">Start charge (gr)</label><input type="number" id="f-sc" step="0.1" min="0"></div>
+      <div><label for="f-sv">Velocity at start (fps)</label><input type="number" id="f-sv" step="1" min="0"></div>
+      <div><label for="f-mc">Max charge (gr) *</label><input type="number" id="f-mc" step="0.1" min="0"></div>
+      <div><label for="f-mv">Velocity at max (fps) *</label><input type="number" id="f-mv" step="1" min="0"></div>
+      <div><label for="f-coal">COAL (in)</label><input type="number" id="f-coal" step="0.001" min="0"></div>
+      <div><label for="f-primer">Primer</label><input type="text" id="f-primer"></div>
+      <div><label for="f-case">Case</label><input type="text" id="f-case"></div>
+      <div><label for="f-bl">Barrel length (in)</label><input type="number" id="f-bl" step="0.1" min="0"></div>
+      <div><label for="f-press">Max pressure (as printed)</label><input type="text" id="f-press" placeholder="e.g. 33,200 PSI"></div>
+      <div><label for="f-srcname">Source name</label><input type="text" id="f-srcname" placeholder="e.g. Hodgdon Reloading Data Center"></div>
+      <div class="full"><label for="f-srcurl">Source URL</label><input type="url" id="f-srcurl" placeholder="https://..."></div>
+      <div class="full"><label for="f-notes">Notes</label><input type="text" id="f-notes" placeholder="e.g. maximum is a compressed charge"></div>
     </div>
     <div class="btn-row">
       <button class="btn primary" id="btn-save-load">Save</button>
@@ -570,8 +577,8 @@ const BUILTIN_LOADS = [
 {cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'HP-38', startChargeGr:3.8, startVelocityFps:661, maxChargeGr:4.3, maxVelocityFps:779, maxPressure:'15,900 CUP', coalIn:1.455, primer:'Winchester SP, Small Pistol', caseBrand:'Winchester', barrelLengthIn:7.7, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
 {cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'CFE Pistol', startChargeGr:4.6, startVelocityFps:816, maxChargeGr:5.0, maxVelocityFps:914, maxPressure:'16,200 PSI', coalIn:1.455, primer:'Winchester SP, Small Pistol', caseBrand:'Winchester', barrelLengthIn:7.7, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
 {cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Titegroup', startChargeGr:3.5, startVelocityFps:704, maxChargeGr:3.9, maxVelocityFps:798, maxPressure:'15,900 CUP', coalIn:1.455, primer:'Winchester SP, Small Pistol', caseBrand:'Winchester', barrelLengthIn:7.7, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed'},
-{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Vihtavuori N320', startChargeGr:4.5, startVelocityFps:801, maxChargeGr:5.1, maxVelocityFps:961, coalIn:1.441, primer:'Small Pistol', caseBrand:'Starline', barrelLengthIn:6.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
-{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Vihtavuori N340', startChargeGr:5.2, startVelocityFps:856, maxChargeGr:5.8, maxVelocityFps:1017, coalIn:1.441, primer:'Small Pistol', caseBrand:'Starline', barrelLengthIn:6.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed'},
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Vihtavuori N320', startChargeGr:4.5, startVelocityFps:801, maxChargeGr:5.1, maxVelocityFps:961, coalIn:1.441, primer:'Small Pistol', caseBrand:'Starline', barrelLengthIn:6.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Vihtavuori develops its load data to CIP pressure standards, not SAAMI. These velocities run well above Hodgdon\u2019s SAAMI-pressure maximums for this same bullet from a longer barrel, so treat this as +P-level data: use it only in revolvers rated for +P, and confirm with Vihtavuori before loading.'},
+{cartridge:'.38 Special', bulletWeightGr:158, bulletDesc:'Hornady 158 gr XTP', powder:'Vihtavuori N340', startChargeGr:5.2, startVelocityFps:856, maxChargeGr:5.8, maxVelocityFps:1017, coalIn:1.441, primer:'Small Pistol', caseBrand:'Starline', barrelLengthIn:6.5, sourceName:'Vihtavuori Reloading Data Tool', sourceUrl:'https://vihtavuori.com/reloading-data/reloading-data-tool/', verified:'confirmed', loadNotes:'Vihtavuori develops its load data to CIP pressure standards, not SAAMI. These velocities run well above Hodgdon\u2019s SAAMI-pressure maximums for this same bullet from a longer barrel, so treat this as +P-level data: use it only in revolvers rated for +P, and confirm with Vihtavuori before loading.'},
 
 /* ---- 6.5 Creedmoor ---- */
 {cartridge:'6.5 Creedmoor', bulletWeightGr:140, bulletDesc:'Hornady 140 gr ELD Match', powder:'H4350', startChargeGr:36.0, startVelocityFps:2464, maxChargeGr:40.0, maxVelocityFps:2660, maxPressure:'59,200 PSI', coalIn:2.820, primer:'Federal 210M, Large Rifle Match', caseBrand:'Hornady', barrelLengthIn:24, sourceName:'Hodgdon Reloading Data Center', sourceUrl:'https://hodgdonreloading.com/rldc/', verified:'confirmed', loadNotes:'Source marks the maximum (40.0 gr) as a compressed charge ("40.0C").'},
@@ -737,14 +744,25 @@ function safeUrl(u) {
   } catch (e) { return null; }
 }
 const onGrid = (v) => Math.abs(v * 10 - Math.round(v * 10)) <= 1e-6; // 0.1 gr resolution
+const asText = (v, max) => (typeof v === 'string' && v.trim()) ? v.trim().slice(0, max) : undefined;
+const asNum = (v) => isNum(v) ? v : undefined;
+const dropNulls = (o) => { Object.keys(o).forEach(k => { if (o[k] === null) delete o[k]; }); return o; };
 
-function loadKey(l) {
-  return [l.cartridge, l.bulletWeightGr, l.bulletDesc, l.powder, l.sourceUrl].join('|');
+const LOAD_TEXT_FIELDS = ['cartridge','powder','bulletDesc','primer','caseBrand','maxPressure','sourceName','sourceUrl','loadNotes','startRule'];
+const LOAD_NUM_FIELDS = ['bulletWeightGr','startChargeGr','startVelocityFps','maxChargeGr','maxVelocityFps','coalIn','barrelLengthIn'];
+const PROVENANCE_FIELDS = ['cartridge','bulletWeightGr','bulletDesc','powder','startChargeGr','startVelocityFps','startRule','maxChargeGr','maxVelocityFps','maxPressure','coalIn','primer','caseBrand','barrelLengthIn','sourceName','sourceUrl','loadNotes'];
+function matchesBuiltin(l) {
+  return BUILTIN_LOADS.some(b => PROVENANCE_FIELDS.every(k => b[k] === l[k]));
+}
+// A log entry and a load describe the same load when these four fields agree.
+function sameLoadIdentity(a, b) {
+  return a.cartridge === b.cartridge && a.powder === b.powder && a.bulletDesc === b.bulletDesc && a.bulletWeightGr === b.bulletWeightGr;
 }
 
 /* ============================ storage ============================ */
 const LS_LIB = 'rc.library.v' + BUILTIN_VERSION;
 const LS_ACK = 'rc.ack.v1';
+const startupNotices = [];
 
 function seedLibrary() {
   return BUILTIN_LOADS.map((l, i) => Object.assign({ id: 'b' + i, origin: 'builtin' }, l));
@@ -757,17 +775,46 @@ function sanitizeIds(arr) {
   });
   return arr;
 }
+// When BUILTIN_VERSION changes, the library moves to a new storage key. Carry the
+// user's own and imported loads forward from the newest older key so they are not
+// silently left behind. The old key is kept untouched as a fallback.
+function migrateOldLibrary() {
+  let bestKey = null, bestV = -1;
+  for (let i = 0; i < localStorage.length; i++) {
+    const m = /^rc\.library\.v(\d+)$/.exec(localStorage.key(i) || '');
+    if (m && +m[1] < BUILTIN_VERSION && +m[1] > bestV) { bestKey = m[0]; bestV = +m[1]; }
+  }
+  if (!bestKey) return null;
+  const arr = JSON.parse(localStorage.getItem(bestKey));
+  if (!Array.isArray(arr)) return null;
+  const carried = arr
+    .filter(l => l && typeof l === 'object' && l.origin !== 'builtin')
+    .map(l => { const c = dropNulls(Object.assign({}, l)); delete c.verified; if (c.origin !== 'user') c.origin = 'imported'; return c; })
+    .filter(l => !validateLoad(l).length && !matchesBuiltin(l));
+  return { version: bestV, carried };
+}
 function loadLibrary() {
   try {
     const raw = localStorage.getItem(LS_LIB);
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return sanitizeIds(arr);
+      if (Array.isArray(arr)) {
+        // skip records that would break rendering (e.g. left by an older import)
+        const ok = arr.filter(l => l && typeof l === 'object' && !validateLoad(l).length);
+        if (ok.length < arr.length) startupNotices.push((arr.length - ok.length) + ' saved load(s) were unreadable and have been skipped.');
+        return sanitizeIds(ok);
+      }
     }
   } catch (e) { /* fall through */ }
   const seeded = seedLibrary();
-  saveLibrary(seeded);
-  return seeded;
+  let mig = null;
+  try { mig = migrateOldLibrary(); } catch (e) { mig = null; }
+  const lib = (mig && mig.carried.length) ? sanitizeIds(seeded.concat(mig.carried)) : seeded;
+  saveLibrary(lib);
+  if (mig && mig.carried.length) {
+    startupNotices.push('Built-in library updated to version ' + BUILTIN_VERSION + '. Your ' + mig.carried.length + ' own/imported load(s) from version ' + mig.version + ' were carried over.');
+  }
+  return lib;
 }
 function saveLibrary(lib) {
   try {
@@ -783,13 +830,15 @@ function saveLibrary(lib) {
 }
 
 /* ============================ state ============================ */
+const SETUP_DEFAULTS = { fpsPerInch: 25, fpsPerDegF: 1.0 };
 function loadSetup() {
-  const def = { barrelIn: null, twist: '', tempF: null, fpsPerInch: 25, fpsPerDegF: 1.0 };
+  let s = { barrelByCart: {}, twist: '', tempF: null, fpsPerInch: SETUP_DEFAULTS.fpsPerInch, fpsPerDegF: SETUP_DEFAULTS.fpsPerDegF };
   try {
     const raw = localStorage.getItem('rc.setup.v1');
-    if (raw) return Object.assign(def, JSON.parse(raw));
+    if (raw) s = Object.assign(s, JSON.parse(raw));
   } catch (e) {}
-  return def;
+  if (!s.barrelByCart || typeof s.barrelByCart !== 'object' || Array.isArray(s.barrelByCart)) s.barrelByCart = {};
+  return s;
 }
 function saveSetup() { try { localStorage.setItem('rc.setup.v1', JSON.stringify(state.setup)); } catch (e) {} }
 
@@ -803,16 +852,37 @@ const state = {
   editingId: null,
 };
 
+// Older versions kept one barrel length for every cartridge, which pushed a rifle
+// barrel onto handgun data. Keep that value only for cartridges whose loads all come
+// from rifle-length test barrels; handgun cartridges start without one.
+if (isNum(state.setup.barrelIn)) {
+  const tests = {};
+  state.lib.forEach(l => { (tests[l.cartridge] = tests[l.cartridge] || []).push(l.barrelLengthIn); });
+  Object.keys(tests).forEach(c => {
+    if (tests[c].every(b => isNum(b) && b >= 10) && !isNum(state.setup.barrelByCart[c])) state.setup.barrelByCart[c] = state.setup.barrelIn;
+  });
+  delete state.setup.barrelIn;
+  saveSetup();
+}
+
+function barrelFor(cart) {
+  const v = cart ? state.setup.barrelByCart[cart] : null;
+  return isNum(v) ? v : null;
+}
+const fpsPerInch = () => isNum(state.setup.fpsPerInch) ? state.setup.fpsPerInch : SETUP_DEFAULTS.fpsPerInch;
+const fpsPerDegF = () => isNum(state.setup.fpsPerDegF) ? state.setup.fpsPerDegF : SETUP_DEFAULTS.fpsPerDegF;
+
 /* Rule-of-thumb estimate of how the user's barrel/temperature shift velocity
    vs the load's published test conditions. Adjusts EXPECTED velocity only —
-   charges always stay inside the published start–max range. */
+   charges always stay inside the published start–max range. The barrel length
+   is the user's barrel for this load's cartridge. */
 function setupDelta(l) {
-  const s = state.setup; let d = 0;
-  if (isNum(s.barrelIn) && isNum(l.barrelLengthIn)) d += (s.barrelIn - l.barrelLengthIn) * (isNum(s.fpsPerInch) ? s.fpsPerInch : 25);
-  if (isNum(s.tempF)) d += (s.tempF - 70) * (isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0);
+  const s = state.setup, b = barrelFor(l.cartridge); let d = 0;
+  if (isNum(b) && isNum(l.barrelLengthIn)) d += (b - l.barrelLengthIn) * fpsPerInch();
+  if (isNum(s.tempF)) d += (s.tempF - 70) * fpsPerDegF();
   return Math.round(d);
 }
-function setupActive() { return isNum(state.setup.barrelIn) || isNum(state.setup.tempF); }
+function setupActive(cart) { return isNum(barrelFor(cart === undefined ? state.cartridge : cart)) || isNum(state.setup.tempF); }
 
 /* ============================ calc engine ============================ */
 /*  The engine NEVER extrapolates: a target above the published max
@@ -973,8 +1043,12 @@ function chartSVG(l, calc, points) {
     dot(X(sc), Y(sv), 'start ' + fmt1(sc) + ' gr', 'Published start: ' + fmt1(sc) + ' gr — ' + fmt0(sv) + ' fps', 'start', 22) +
     dot(X(mc), Y(mv), 'MAX ' + fmt1(mc) + ' gr', 'Published maximum: ' + fmt1(mc) + ' gr — ' + fmt0(mv) + ' fps', 'end', -12) +
     targetDot +
-    points.map(p => '<circle cx="' + X(p.chargeGr) + '" cy="' + Y(p.avgFps) + '" r="12" fill="transparent"><title>Your chrono: ' + fmt1(p.chargeGr) + ' gr — ' + fmt0(p.avgFps) + ' fps' + (p.date ? ' (' + esc(p.date) + ')' : '') + '</title></circle>' +
-      '<circle cx="' + X(p.chargeGr) + '" cy="' + Y(p.avgFps) + '" r="5" fill="var(--surface)" stroke="var(--ink)" stroke-width="2" pointer-events="none"/>').join('') +
+    points.map(p => {
+      const over = p.chargeGr > mc + 1e-9;
+      return '<circle cx="' + X(p.chargeGr) + '" cy="' + Y(p.avgFps) + '" r="12" fill="transparent"><title>Your chrono: ' + fmt1(p.chargeGr) + ' gr — ' + fmt0(p.avgFps) + ' fps' + (p.date ? ' (' + esc(p.date) + ')' : '') + (over ? ' — ABOVE PUBLISHED MAX' : '') + '</title></circle>' +
+        '<circle cx="' + X(p.chargeGr) + '" cy="' + Y(p.avgFps) + '" r="5" fill="' + (over ? 'var(--critical)' : 'var(--surface)') + '" stroke="' + (over ? 'var(--critical)' : 'var(--ink)') + '" stroke-width="2" pointer-events="none"/>' +
+        (over ? '<text x="' + X(p.chargeGr) + '" y="' + (Y(p.avgFps) + 20) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--critical)">over max</text>' : '');
+    }).join('') +
     (points.length ? '<text x="' + (W - m.r) + '" y="' + (m.t - 10) + '" text-anchor="end" font-size="11" fill="var(--ink-2)">— published curve &nbsp; ○ your chronograph</text>' : '') +
     '<text x="' + (m.l - 46) + '" y="' + (m.t - 10) + '" font-size="11" fill="var(--muted)">fps</text>' +
     '<text x="' + (W - m.r) + '" y="' + (H - 8) + '" text-anchor="end" font-size="11" fill="var(--muted)">charge (gr)</text>' +
@@ -1123,19 +1197,19 @@ function renderRecipe() {
   }
 
   let setupRow = null;
-  if (setupActive()) {
-    const s = state.setup, parts = [];
-    if (isNum(s.barrelIn)) {
+  if (setupActive(l.cartridge)) {
+    const s = state.setup, b = barrelFor(l.cartridge), parts = [];
+    if (isNum(b)) {
       if (isNum(l.barrelLengthIn)) {
-        const db = Math.round((s.barrelIn - l.barrelLengthIn) * (isNum(s.fpsPerInch) ? s.fpsPerInch : 25));
-        parts.push((db >= 0 ? '+' : '') + db + ' fps barrel (' + s.barrelIn + '&Prime; vs ' + l.barrelLengthIn + '&Prime; test @ ' + (isNum(s.fpsPerInch) ? s.fpsPerInch : 25) + ' fps/in)');
+        const db = Math.round((b - l.barrelLengthIn) * fpsPerInch());
+        parts.push((db >= 0 ? '+' : '') + db + ' fps barrel (' + b + '&Prime; vs ' + l.barrelLengthIn + '&Prime; test @ ' + fpsPerInch() + ' fps/in)');
       } else {
         parts.push('barrel adjustment not applied &mdash; no test barrel length published for this load');
       }
     }
     if (isNum(s.tempF)) {
-      const dt = Math.round((s.tempF - 70) * (isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0));
-      parts.push((dt >= 0 ? '+' : '') + dt + ' fps temperature (' + s.tempF + '&deg;F vs 70&deg;F reference @ ' + (isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0) + ' fps/&deg;F)');
+      const dt = Math.round((s.tempF - 70) * fpsPerDegF());
+      parts.push((dt >= 0 ? '+' : '') + dt + ' fps temperature (' + s.tempF + '&deg;F vs 70&deg;F reference @ ' + fpsPerDegF() + ' fps/&deg;F)');
     }
     setupRow = ['Your setup adjustment', parts.join(' &middot; ') + ' &mdash; rule-of-thumb estimates; chronograph to confirm'];
   }
@@ -1196,8 +1270,38 @@ function deleteLogEntry(id) {
   }
 }
 function showTab(name) {
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('#tabs button').forEach(b => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
+
+/* ============================ modals ============================
+   While a modal is open, everything behind it is made inert so keyboard and
+   screen-reader users cannot operate the page (the safety acknowledgement in
+   particular must be answered first). Log and edit modals close on Escape. */
+const MODAL_BACKGROUND = ['.safety-strip', '#storage-warn', '#app-notice', '#render-error', 'header.app', 'nav.tabs', 'main', 'footer.app'];
+let modalReturnFocus = null;
+function setBackgroundInert(on) {
+  MODAL_BACKGROUND.forEach(sel => document.querySelectorAll(sel).forEach(el => { el.inert = on; }));
+}
+function openModal(id, focusSel) {
+  const back = $(id);
+  if (!document.querySelector('.modal-back.open')) modalReturnFocus = document.activeElement;
+  back.classList.add('open');
+  setBackgroundInert(true);
+  const target = (focusSel && $(focusSel)) || back.querySelector('input, select, button');
+  if (target) target.focus();
+}
+function closeModal(id) {
+  $(id).classList.remove('open');
+  if (!document.querySelector('.modal-back.open')) {
+    setBackgroundInert(false);
+    if (modalReturnFocus && document.contains(modalReturnFocus)) modalReturnFocus.focus();
+    modalReturnFocus = null;
+  }
 }
 
 /* ============================ render: library ============================ */
@@ -1254,13 +1358,17 @@ function openEdit(id) {
   set('#f-case', l?.caseBrand); set('#f-bl', l?.barrelLengthIn);
   set('#f-press', l?.maxPressure); set('#f-srcname', l?.sourceName); set('#f-srcurl', l?.sourceUrl);
   set('#f-notes', l?.loadNotes);
-  $('#edit-back').classList.add('open');
+  openModal('#edit-back', '#f-cartridge');
 }
 function validateLoad(rec) {
   const problems = [];
-  if (!rec.cartridge) problems.push('cartridge is required');
-  if (!rec.powder) problems.push('powder is required');
-  if (!rec.bulletDesc) problems.push('bullet description is required');
+  // text fields must be text and numeric fields must be numbers (a "5.3" string is
+  // rejected, not silently treated as missing)
+  LOAD_TEXT_FIELDS.forEach(k => { if (rec[k] !== undefined && (typeof rec[k] !== 'string' || rec[k].length > 500)) problems.push(k + ' must be text'); });
+  LOAD_NUM_FIELDS.forEach(k => { if (rec[k] !== undefined && !isNum(rec[k])) problems.push(k + ' must be a number'); });
+  if (typeof rec.cartridge !== 'string' || !rec.cartridge.trim()) problems.push('cartridge is required');
+  if (typeof rec.powder !== 'string' || !rec.powder.trim()) problems.push('powder is required');
+  if (typeof rec.bulletDesc !== 'string' || !rec.bulletDesc.trim()) problems.push('bullet description is required');
   if (!isNum(rec.bulletWeightGr) || rec.bulletWeightGr <= 0 || rec.bulletWeightGr > 1500) problems.push('bullet weight must be a positive number of grains');
   if (!isNum(rec.maxChargeGr) || rec.maxChargeGr <= 0 || rec.maxChargeGr > 300) problems.push('max charge must be a positive number of grains');
   else if (!onGrid(rec.maxChargeGr)) problems.push('max charge must be in 0.1 gr steps, exactly as published');
@@ -1298,20 +1406,35 @@ function saveEdit() {
 
   if (state.editingId) {
     const l = state.lib.find(x => x.id === state.editingId);
+    if (!l) { closeModal('#edit-back'); refreshAll(); return; }
     const wasBuiltin = l.origin === 'builtin';
+    // Range-log entries recorded against this load: if the edit changes what the
+    // load IS (cartridge, bullet or powder), ask whether they follow the edit.
+    const attached = logEntriesFor(l);
+    let moveLog = null;
+    if (attached.length && !sameLoadIdentity(l, rec)) {
+      moveLog = confirm(attached.length + ' range-log ' + (attached.length === 1 ? 'entry was' : 'entries were') + ' recorded for ' +
+        l.cartridge + ' / ' + l.bulletWeightGr + ' gr ' + l.bulletDesc + ' / ' + l.powder + '.\n\n' +
+        'OK: move them to the edited load (choose this if you only fixed a typo).\n' +
+        'Cancel: keep them under the old cartridge, bullet and powder in the Load Log.');
+    }
     Object.keys(rec).forEach(k => { if (rec[k] === undefined) delete l[k]; else l[k] = rec[k]; });
-    // remove cleared optional fields
-    ['startChargeGr','startVelocityFps','coalIn','primer','caseBrand','barrelLengthIn','maxPressure','sourceName','sourceUrl','loadNotes'].forEach(k => {
-      if (rec[k] === undefined) delete l[k];
-    });
     if (wasBuiltin) { l.origin = 'user'; delete l.verified; } // edited data is no longer the verified transcription
+    if (moveLog !== null) {
+      attached.forEach(e => {
+        if (moveLog) { e.loadId = l.id; e.cartridge = l.cartridge; e.bulletDesc = l.bulletDesc; e.bulletWeightGr = l.bulletWeightGr; e.powder = l.powder; }
+        else delete e.loadId;
+      });
+      saveLog();
+    }
   } else {
     rec.id = 'u' + Math.random().toString(36).slice(2, 9);
     rec.origin = 'user';
+    Object.keys(rec).forEach(k => { if (rec[k] === undefined) delete rec[k]; });
     state.lib.push(rec);
   }
   saveLibrary(state.lib);
-  $('#edit-back').classList.remove('open');
+  closeModal('#edit-back');
   refreshAll();
 }
 
@@ -1324,21 +1447,17 @@ function exportLibrary() {
   a.click();
   URL.revokeObjectURL(a.href);
 }
-const PROVENANCE_FIELDS = ['cartridge','bulletWeightGr','bulletDesc','powder','startChargeGr','startVelocityFps','startRule','maxChargeGr','maxVelocityFps','maxPressure','coalIn','primer','caseBrand','barrelLengthIn','sourceName','sourceUrl','loadNotes'];
-function matchesBuiltin(l) {
-  return BUILTIN_LOADS.some(b => PROVENANCE_FIELDS.every(k => b[k] === l[k]));
-}
 function importLibrary(file) {
   const reader = new FileReader();
   reader.onload = () => {
+    const cleaned = [];
+    let skipped = 0;
     try {
       const arr = JSON.parse(reader.result);
       if (!Array.isArray(arr)) throw new Error('not an array');
-      const cleaned = [];
-      let skipped = 0;
       arr.forEach(raw => {
-        if (!raw || typeof raw !== 'object') { skipped++; return; }
-        const l = Object.assign({}, raw);
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { skipped++; return; }
+        const l = dropNulls(Object.assign({}, raw));
         if (l.sourceUrl && !safeUrl(l.sourceUrl)) delete l.sourceUrl;
         if (validateLoad(l).length) { skipped++; return; }
         // the verified badge is earned, not imported: only entries identical
@@ -1347,24 +1466,59 @@ function importLibrary(file) {
         else { l.origin = (raw.origin === 'user') ? 'user' : 'imported'; delete l.verified; }
         cleaned.push(l);
       });
-      if (!cleaned.length) { alert('No valid load entries found in that file.'); return; }
-      const msg = 'Replace your current library (' + state.lib.length + ' loads) with the imported file (' + cleaned.length + ' valid loads' + (skipped ? '; ' + skipped + ' invalid entries skipped' : '') + ')? Export first if unsure.';
-      if (!confirm(msg)) return;
-      cleaned.forEach((l, i) => { l.id = 'imp' + i; });   // never trust file-supplied ids
-      state.lib = cleaned;
-      saveLibrary(state.lib);
-      refreshAll();
     } catch (e) {
       alert('Could not read that file as a load-library JSON export.');
+      return;
     }
+    if (!cleaned.length) { alert('No valid load entries found in that file.'); return; }
+    const msg = 'Replace your current library (' + state.lib.length + ' loads) with the imported file (' + cleaned.length + ' valid loads' + (skipped ? '; ' + skipped + ' invalid entries skipped' : '') + ')? Export first if unsure.';
+    if (!confirm(msg)) return;
+    // never trust file-supplied ids, and never reuse an id from an earlier import:
+    // log entries remember the id of the load they were recorded against
+    const stamp = Date.now().toString(36);
+    cleaned.forEach((l, i) => { l.id = 'imp' + stamp + '_' + i; });
+    state.lib = cleaned;
+    saveLibrary(state.lib);
+    refreshAll();
   };
   reader.readAsText(file);
 }
 
 /* ============================ load log ============================ */
 const LS_LOG = 'rc.loadlog.v1';
+// Build a clean log entry from untrusted data (an imported file or older storage):
+// known keys only, each with the right type, stats recomputed from the shots.
+function normalizeLogEntry(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const e = {
+    id: asText(raw.id, 40), loadId: asText(raw.loadId, 60),
+    cartridge: asText(raw.cartridge, 120), bulletDesc: asText(raw.bulletDesc, 200), bulletWeightGr: asNum(raw.bulletWeightGr), powder: asText(raw.powder, 120),
+    date: asText(raw.date, 20), chargeGr: asNum(raw.chargeGr), rounds: asNum(raw.rounds), tempF: asNum(raw.tempF),
+    shots: Array.isArray(raw.shots) ? raw.shots.filter(isNum) : undefined,
+    avgFps: asNum(raw.avgFps), sdFps: asNum(raw.sdFps), esFps: asNum(raw.esFps), n: asNum(raw.n),
+    rifle: asText(raw.rifle, 120), groupIn: asNum(raw.groupIn), groupYd: asNum(raw.groupYd),
+    pressure: Array.isArray(raw.pressure) ? raw.pressure.filter(p => typeof p === 'string' && p.trim()).map(p => p.trim().slice(0, 60)) : [],
+    notes: asText(raw.notes, 1000),
+  };
+  if (!e.cartridge || !e.powder || !isNum(e.chargeGr) || e.chargeGr <= 0) return null;
+  const st = e.shots && e.shots.length ? shotStats(e.shots) : null;
+  if (st) { e.avgFps = st.avg; e.sdFps = st.sd; e.esFps = st.es; e.n = st.n; }
+  else { delete e.shots; delete e.sdFps; delete e.esFps; delete e.n; }
+  Object.keys(e).forEach(k => { if (e[k] === undefined) delete e[k]; });
+  return e;
+}
 function loadLog() {
-  try { const raw = localStorage.getItem(LS_LOG); if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) return a; } } catch (e) {}
+  try {
+    const raw = localStorage.getItem(LS_LOG);
+    if (raw) {
+      const a = JSON.parse(raw);
+      if (Array.isArray(a)) {
+        const ok = a.map(normalizeLogEntry).filter(Boolean);
+        if (ok.length < a.length) startupNotices.push((a.length - ok.length) + ' saved log entr' + (a.length - ok.length === 1 ? 'y was' : 'ies were') + ' unreadable and have been skipped.');
+        return ok;
+      }
+    }
+  } catch (e) {}
   return [];
 }
 function saveLog() { try { localStorage.setItem(LS_LOG, JSON.stringify(state.log)); } catch (e) { const w = document.getElementById('storage-warn'); if (w) w.style.display = 'block'; } }
@@ -1378,9 +1532,17 @@ function shotStats(shots) {
   const sd = s.length > 1 ? Math.sqrt(s.reduce((a, b) => a + (b - avg) * (b - avg), 0) / (s.length - 1)) : 0;
   return { n: s.length, avg: Math.round(avg), sd: Math.round(sd * 10) / 10, es: Math.max(...s) - Math.min(...s) };
 }
+// The load an entry belongs to: the load it was logged against, but only while that
+// load still has the same cartridge, bullet and powder. Load ids are not stable
+// across imports and re-seeds, so the identity must always agree; if the original
+// load is gone, fall back to any load with the same identity.
+function loadForEntry(e) {
+  const byId = e.loadId ? state.lib.find(l => l.id === e.loadId) : null;
+  if (byId && sameLoadIdentity(e, byId)) return byId;
+  return state.lib.find(l => sameLoadIdentity(e, l)) || null;
+}
 function logEntriesFor(l) {
-  // match by id first, then by identity so entries survive library re-seeds
-  return state.log.filter(e => e.loadId === l.id || (e.cartridge === l.cartridge && e.powder === l.powder && e.bulletDesc === l.bulletDesc && e.bulletWeightGr === l.bulletWeightGr))
+  return state.log.filter(e => loadForEntry(e) === l)
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 }
 function pressureBadge(e) {
@@ -1388,13 +1550,26 @@ function pressureBadge(e) {
     ? '<span class="badge unverified" title="' + esc(e.pressure.join(', ')) + '">&#9888; ' + esc(e.pressure.join(', ')) + '</span>'
     : '<span class="badge verified">&#10003; no pressure signs</span>';
 }
+// Flag a logged charge outside the published start–max range of its load, every
+// time it is shown (not just once when it was saved).
+function chargeFlagHTML(e) {
+  const l = loadForEntry(e);
+  if (!l || !isNum(e.chargeGr)) return '';
+  if (e.chargeGr > l.maxChargeGr + 1e-9)
+    return '<br><span class="badge danger" title="This charge is above the published maximum for this load.">&#9888; above published max ' + fmt1(l.maxChargeGr) + ' gr</span>';
+  if (isNum(l.startChargeGr) && e.chargeGr < l.startChargeGr - 1e-9)
+    return '<br><span class="badge unverified" title="Below the published starting charge: squib and erratic-pressure risk.">&#9888; below published start ' + fmt1(l.startChargeGr) + ' gr</span>';
+  return '';
+}
 function logRowHTML(e, showLoad) {
+  const stats = isNum(e.sdFps) && isNum(e.esFps) && isNum(e.n) && e.n > 1
+    ? ' <span style="color:var(--ink-2)">SD ' + fmt1(e.sdFps) + ' / ES ' + fmt0(e.esFps) + ' (n=' + fmt0(e.n) + ')</span>' : '';
   return '<tr>' +
     '<td class="num">' + esc(e.date || '—') + '</td>' +
-    (showLoad ? '<td>' + esc(e.bulletWeightGr + ' gr ' + e.bulletDesc) + '<br><span style="color:var(--ink-2)">' + esc(e.powder) + '</span></td>' : '') +
-    '<td class="num">' + fmt1(e.chargeGr) + ' gr</td>' +
-    '<td class="num">' + (isNum(e.avgFps) ? fmt0(e.avgFps) + (isNum(e.sdFps) && e.n > 1 ? ' <span style="color:var(--ink-2)">SD ' + e.sdFps + ' / ES ' + e.esFps + ' (n=' + e.n + ')</span>' : '') : '—') + '</td>' +
-    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + (e.groupYd || 100) + ' yd' : '—') + '</td>' +
+    (showLoad ? '<td>' + esc((isNum(e.bulletWeightGr) ? e.bulletWeightGr + ' gr ' : '') + (e.bulletDesc || '')) + '<br><span style="color:var(--ink-2)">' + esc(e.powder) + '</span></td>' : '') +
+    '<td class="num">' + fmt1(e.chargeGr) + ' gr' + chargeFlagHTML(e) + '</td>' +
+    '<td class="num">' + (isNum(e.avgFps) ? fmt0(e.avgFps) + stats : '—') + '</td>' +
+    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + fmt0(isNum(e.groupYd) ? e.groupYd : 100) + ' yd' : '—') + '</td>' +
     '<td class="num">' + (isNum(e.tempF) ? e.tempF + '&deg;F' : '—') + '</td>' +
     '<td>' + pressureBadge(e) + (e.notes ? '<br><span style="color:var(--ink-2)">' + esc(e.notes) + '</span>' : '') + (e.rifle ? '<br><span style="color:var(--muted);font-size:12px">' + esc(e.rifle) + '</span>' : '') + '</td>' +
     '<td style="white-space:nowrap"><button class="rowbtn" data-logedit="' + esc(e.id) + '">edit</button><button class="rowbtn del" data-logdel="' + esc(e.id) + '">delete</button></td>' +
@@ -1417,17 +1592,24 @@ function openLogEntry(prefill) {
   const e = prefill || {};
   state.logEditing = e.id || null;
   const sel = $('#g-load');
-  sel.innerHTML = state.lib.slice().sort((a, b) => a.cartridge.localeCompare(b.cartridge) || a.bulletWeightGr - b.bulletWeightGr || a.powder.localeCompare(b.powder))
+  sel.innerHTML = '<option value="">— pick the load you fired —</option>' +
+    state.lib.slice().sort((a, b) => a.cartridge.localeCompare(b.cartridge) || a.bulletWeightGr - b.bulletWeightGr || a.powder.localeCompare(b.powder))
     .map(l => '<option value="' + esc(l.id) + '">' + esc(l.cartridge + ' · ' + l.bulletWeightGr + ' gr ' + l.bulletDesc + ' · ' + l.powder) + '</option>').join('');
-  if (e.loadId) sel.value = e.loadId;
+  // never preselect a load the entry was not recorded against
+  const owner = e.id ? loadForEntry(e) : state.lib.find(l => l.id === e.loadId);
+  sel.value = owner ? owner.id : '';
   const set = (s, v) => { $(s).value = v == null ? '' : v; };
-  set('#g-date', e.date || new Date().toISOString().slice(0, 10));
-  set('#g-charge', e.chargeGr); set('#g-rounds', e.rounds); set('#g-temp', e.tempF ?? (isNum(state.setup.tempF) ? state.setup.tempF : ''));
+  const isNew = !e.id;
+  const barrel = barrelFor(owner ? owner.cartridge : state.cartridge);
+  set('#g-date', e.date || (isNew ? new Date().toISOString().slice(0, 10) : ''));
+  set('#g-charge', e.chargeGr); set('#g-rounds', e.rounds);
+  // only a NEW entry is prefilled from the setup panel; editing never invents data
+  set('#g-temp', isNew ? (e.tempF ?? (isNum(state.setup.tempF) ? state.setup.tempF : '')) : e.tempF);
   set('#g-shots', e.shots ? e.shots.join(', ') : ''); set('#g-avg', e.shots && e.shots.length ? '' : e.avgFps);
-  set('#g-rifle', e.rifle ?? (isNum(state.setup.barrelIn) ? state.setup.barrelIn + '" barrel' : ''));
-  set('#g-group', e.groupIn); set('#g-groupyd', e.groupYd || 100); set('#g-notes', e.notes);
+  set('#g-rifle', isNew ? (e.rifle ?? (isNum(barrel) ? barrel + '" barrel' : '')) : e.rifle);
+  set('#g-group', e.groupIn); set('#g-groupyd', isNum(e.groupYd) ? e.groupYd : 100); set('#g-notes', e.notes);
   document.querySelectorAll('.g-ps').forEach(cb => { cb.checked = !!(e.pressure && e.pressure.includes(cb.value)); });
-  $('#log-back').classList.add('open');
+  openModal('#log-back', owner ? '#g-charge' : '#g-load');
 }
 function saveLogEntry() {
   const num = (s) => { const v = parseFloat($(s).value); return isFinite(v) ? v : undefined; };
@@ -1435,8 +1617,20 @@ function saveLogEntry() {
   if (!l) { alert('Pick a load.'); return; }
   const chargeGr = num('#g-charge');
   if (!isNum(chargeGr) || chargeGr <= 0) { alert('Enter the charge you actually fired.'); return; }
+  // Chronograph shots: every token must be a plain velocity. parseFloat would turn a
+  // typo like "27o0" into 27 and "2,650" into two shots, silently corrupting the average.
+  const shotText = $('#g-shots').value.trim();
+  const tokens = shotText ? shotText.split(/[\s,;]+/).filter(Boolean) : [];
+  const badShots = tokens.filter(t => !/^\d+(\.\d+)?$/.test(t) || +t < 100 || +t > 6000);
+  if (badShots.length) {
+    alert('These chronograph entries are not velocities between 100 and 6000 fps: ' + badShots.slice(0, 5).join(', ') +
+      '\n\nSeparate shots with commas or spaces, and don’t use thousands separators (2650, not 2,650).');
+    return;
+  }
+  const typedAvg = num('#g-avg');
+  if (!tokens.length && typedAvg !== undefined && (typedAvg < 100 || typedAvg > 6000)) { alert('Average velocity must be between 100 and 6000 fps.'); return; }
   if (chargeGr > l.maxChargeGr + 1e-9) { if (!confirm('That charge is ABOVE the published maximum for this load (' + fmt1(l.maxChargeGr) + ' gr). Log it anyway?')) return; }
-  const shots = $('#g-shots').value.split(/[\s,;]+/).map(parseFloat).filter(isFinite);
+  const shots = tokens.map(Number);
   const st = shotStats(shots);
   const e = {
     id: state.logEditing || ('g' + Math.random().toString(36).slice(2, 9)),
@@ -1454,7 +1648,7 @@ function saveLogEntry() {
   const i = state.log.findIndex(x => x.id === e.id);
   if (i >= 0) state.log[i] = e; else state.log.push(e);
   saveLog();
-  $('#log-back').classList.remove('open');
+  closeModal('#log-back');
   renderLog(); renderRecipe();
 }
 function exportLog() {
@@ -1464,16 +1658,23 @@ function exportLog() {
 function importLog(file) {
   const reader = new FileReader();
   reader.onload = () => {
+    let arr;
     try {
-      const arr = JSON.parse(reader.result);
-      if (!Array.isArray(arr)) throw new Error();
-      const ok = arr.filter(e => e && typeof e === 'object' && e.cartridge && e.powder && isNum(e.chargeGr));
-      if (!ok.length) { alert('No valid log entries in that file.'); return; }
-      if (!confirm('Merge ' + ok.length + ' log entries into your log (' + state.log.length + ' existing)?')) return;
-      const have = new Set(state.log.map(e => e.id));
-      ok.forEach((e, i) => { if (!e.id || have.has(e.id)) e.id = 'gi' + Date.now().toString(36) + i; state.log.push(e); });
-      saveLog(); renderLog(); renderRecipe();
-    } catch (e) { alert('Could not read that file as a log export.'); }
+      arr = JSON.parse(reader.result);
+      if (!Array.isArray(arr)) throw new Error('not an array');
+    } catch (e) { alert('Could not read that file as a log export.'); return; }
+    // every entry is rebuilt from known, typed fields: nothing from the file reaches the page raw
+    const ok = arr.map(normalizeLogEntry).filter(Boolean);
+    if (!ok.length) { alert('No valid log entries in that file.'); return; }
+    const overMax = ok.filter(e => { const l = loadForEntry(e); return l && e.chargeGr > l.maxChargeGr + 1e-9; }).length;
+    const skipped = arr.length - ok.length;
+    if (!confirm('Merge ' + ok.length + ' log entries into your log (' + state.log.length + ' existing)?' +
+      (skipped ? '\n' + skipped + ' invalid entries will be skipped.' : '') +
+      (overMax ? '\n\nWARNING: ' + overMax + ' of them record a charge ABOVE the published maximum for their load.' : ''))) return;
+    const have = new Set(state.log.map(e => e.id));
+    const stamp = Date.now().toString(36);
+    ok.forEach((e, i) => { if (!e.id || have.has(e.id)) e.id = 'gi' + stamp + '_' + i; have.add(e.id); state.log.push(e); });
+    saveLog(); renderLog(); renderRecipe();
   };
   reader.readAsText(file);
 }
@@ -1499,6 +1700,7 @@ function solveTrajectory(p) {
   const k = 2.0856e-4 * densRatio / p.bc;
   const table = p.model === 'G7' ? G7 : G1;
   const ranges = [];
+  if (!(p.stepYd > 0) || !(p.maxYd > 0) || p.maxYd / p.stepYd > 5000) return null;   // never loop unbounded
   for (let r = p.stepYd; r <= p.maxYd + 1e-9; r += p.stepYd) ranges.push(r);
   if (!ranges.includes(p.zeroYd)) ranges.push(p.zeroYd);
   ranges.sort((a, b) => a - b);
@@ -1564,7 +1766,11 @@ function renderBallistics() {
   if (!isNum(p.mv) || p.mv < 300) problems.push('muzzle velocity');
   if (!isNum(p.bc) || p.bc <= 0) problems.push('ballistic coefficient');
   if (!isNum(p.weightGr) || p.weightGr <= 0) problems.push('bullet weight');
-  if (p.zeroYd > p.maxYd) problems.push('zero range must be within max range');
+  if (!isNum(p.zeroYd) || p.zeroYd < 1) problems.push('a zero range of at least 1 yd');
+  if (!isNum(p.maxYd) || p.maxYd < 1 || p.maxYd > 3000) problems.push('a max range between 1 and 3000 yd');
+  if (!isNum(p.stepYd) || p.stepYd < 1) problems.push('a step of at least 1 yd');
+  else if (isNum(p.maxYd) && p.maxYd / p.stepYd > 500) problems.push('a larger step (the table is limited to 500 rows)');
+  if (p.zeroYd > p.maxYd) problems.push('a zero range within the max range');
   if (problems.length) { out.innerHTML = '<p class="empty-note">Enter: ' + problems.join(', ') + '.</p>'; return; }
   try { localStorage.setItem(LS_BAL, JSON.stringify(p)); if (p.bulletKey) { const m = JSON.parse(localStorage.getItem(LS_BC) || '{}'); m[p.bulletKey] = { bc: p.bc, model: p.model }; localStorage.setItem(LS_BC, JSON.stringify(m)); } } catch (e) {}
   const rows = solveTrajectory(p);
@@ -1585,44 +1791,68 @@ function ballisticsFillFromRecipe() {
   const logged = logEntriesFor(l).filter(e => isNum(e.avgFps)).pop();
   let mv, src;
   if (logged) { mv = logged.avgFps; src = 'your logged average (' + fmt0(mv) + ' fps' + (logged.date ? ', ' + logged.date : '') + ')'; }
-  else if (c.status === 'ok' || c.status === 'nearmax') { mv = c.estVel + d; src = 'estimated ' + fmt0(mv) + ' fps' + (d !== 0 ? ' in your setup' : ' (test barrel)'); }
+  // 'below' means the recipe says load the published START charge, so use the start velocity
+  else if (isNum(c.estVel)) { mv = c.estVel + d; src = (c.status === 'below' ? 'published start ' : 'estimated ') + fmt0(mv) + ' fps' + (d !== 0 ? ' in your setup' : ' (test barrel)'); }
   else { mv = l.maxVelocityFps + d; src = 'published max ' + fmt0(mv) + ' fps'; }
   $('#b-mv').value = Math.round(mv);
   $('#b-wt').value = l.bulletWeightGr;
   $('#b-bc').dataset.bullet = l.bulletDesc;
-  try { const m = JSON.parse(localStorage.getItem(LS_BC) || '{}'); if (m[l.bulletDesc]) { $('#b-bc').value = m[l.bulletDesc].bc; $('#b-model').value = m[l.bulletDesc].model || 'G1'; } } catch (e) {}
+  // use this bullet's saved BC, or clear the field: never solve with the previous bullet's BC
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LS_BC) || '{}')[l.bulletDesc] || null; } catch (e) {}
+  if (saved && isNum(saved.bc)) { $('#b-bc').value = saved.bc; $('#b-model').value = saved.model === 'G7' ? 'G7' : 'G1'; }
+  else { $('#b-bc').value = ''; $('#b-model').value = 'G1'; }
   if (isNum(state.setup.tempF)) $('#b-temp').value = state.setup.tempF;
   note.textContent = l.bulletWeightGr + ' gr ' + l.bulletDesc + ' · ' + l.powder + ' — velocity from ' + src + '. Enter the bullet maker’s BC.';
   if (!$('#b-bc').value) $('#b-bc').focus(); else renderBallistics();
 }
 
 /* ============================ wiring ============================ */
+const clampNum = (v, lo, hi) => { const n = parseFloat(v); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
 function renderSetupSummary() {
   const el = $('#setup-summary');
   if (!el) return;
-  const s = state.setup, bits = [];
-  if (isNum(s.barrelIn)) bits.push(s.barrelIn + '″ barrel');
+  const s = state.setup, b = barrelFor(state.cartridge), bits = [];
+  if (isNum(b)) bits.push(b + '″ barrel');
   if (isNum(s.tempF)) bits.push(s.tempF + '°F');
   if (s.twist) bits.push('twist ' + s.twist);
-  el.textContent = bits.length ? '· ' + bits.join(', ') + ' (adjusting estimates)' : '(optional)';
+  el.textContent = bits.length ? '· ' + bits.join(', ') + (setupActive() ? ' (adjusting estimates)' : '') : '(optional)';
 }
+// Fill the setup panel from state. The barrel field shows the barrel stored for the
+// cartridge currently picked.
+function renderSetupPanel() {
+  const s = state.setup, b = barrelFor(state.cartridge);
+  $('#s-barrel-cart').textContent = state.cartridge || 'this cartridge';
+  $('#s-barrel').value = isNum(b) ? b : '';
+  $('#s-barrel').disabled = !state.cartridge;
+  $('#s-twist').value = s.twist || '';
+  $('#s-temp').value = isNum(s.tempF) ? s.tempF : '';
+  $('#s-fpi').value = fpsPerInch();
+  $('#s-fpd').value = fpsPerDegF();
+  renderSetupSummary();
+}
+// Each step renders on its own, so one bad record cannot blank the whole app;
+// if any step fails, a banner tells the user how to recover.
 function refreshAll() {
-  renderCartridges(); renderBullets(); renderVelocity(); renderResults(); renderLibrary(); renderSetupSummary(); renderLog();
+  let failed = false;
+  [renderCartridges, renderBullets, renderVelocity, renderResults, renderLibrary, renderSetupPanel, renderLog].forEach(fn => {
+    try { fn(); } catch (e) { failed = true; console.error(e); }
+  });
+  const banner = $('#render-error');
+  if (banner) banner.style.display = failed ? 'block' : 'none';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   // tabs
   $('#tabs').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-tab]');
-    if (!btn) return;
-    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + btn.dataset.tab));
+    if (btn) showTab(btn.dataset.tab);
   });
 
   // pickers
   $('#sel-cartridge').addEventListener('change', (e) => {
     state.cartridge = e.target.value; state.bulletKey = null; state.selectedLoadId = null; state.targetVel = null;
-    renderBullets(); renderVelocity(); renderResults();
+    renderBullets(); renderSetupPanel(); renderVelocity(); renderResults();
   });
   $('#sel-bullet').addEventListener('change', (e) => {
     state.bulletKey = e.target.value; state.selectedLoadId = null; state.targetVel = null;
@@ -1653,38 +1883,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (card) { e.preventDefault(); openCard(card); }
   });
 
-  // rifle & conditions
-  const setupInit = () => {
-    const s = state.setup;
-    $('#s-barrel').value = isNum(s.barrelIn) ? s.barrelIn : '';
-    $('#s-twist').value = s.twist || '';
-    $('#s-temp').value = isNum(s.tempF) ? s.tempF : '';
-    $('#s-fpi').value = isNum(s.fpsPerInch) ? s.fpsPerInch : 25;
-    $('#s-fpd').value = isNum(s.fpsPerDegF) ? s.fpsPerDegF : 1.0;
-    renderSetupSummary();
-  };
-  const clampNum = (v, lo, hi) => { const n = parseFloat(v); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
+  // rifle & conditions (barrel length is stored per cartridge)
   const setupChanged = () => {
-    state.setup.barrelIn = clampNum($('#s-barrel').value, 1, 50);
+    if (state.cartridge) {
+      const b = clampNum($('#s-barrel').value, 1, 50);
+      if (b === null) delete state.setup.barrelByCart[state.cartridge];
+      else state.setup.barrelByCart[state.cartridge] = b;
+    }
     state.setup.twist = $('#s-twist').value.replace(/\s+/g, ' ').trim().slice(0, 20);
     state.setup.tempF = clampNum($('#s-temp').value, -40, 130);
-    state.setup.fpsPerInch = clampNum($('#s-fpi').value, 0, 100) ?? 25;
-    state.setup.fpsPerDegF = clampNum($('#s-fpd').value, 0, 5) ?? 1.0;
+    state.setup.fpsPerInch = clampNum($('#s-fpi').value, 0, 100) ?? SETUP_DEFAULTS.fpsPerInch;
+    state.setup.fpsPerDegF = clampNum($('#s-fpd').value, 0, 5) ?? SETUP_DEFAULTS.fpsPerDegF;
     saveSetup();
-    setupInit();
+    renderSetupPanel();
     renderVelocity(); renderResults();
   };
   ['#s-barrel', '#s-twist', '#s-temp', '#s-fpi', '#s-fpd'].forEach(sel => $(sel).addEventListener('change', setupChanged));
   $('#s-clear').addEventListener('click', () => {
-    state.setup = { barrelIn: null, twist: '', tempF: null, fpsPerInch: 25, fpsPerDegF: 1.0 };
-    saveSetup(); setupInit(); renderVelocity(); renderResults();
+    // clears what the panel shows: this cartridge's barrel plus the shared settings
+    if (state.cartridge) delete state.setup.barrelByCart[state.cartridge];
+    Object.assign(state.setup, { twist: '', tempF: null, fpsPerInch: SETUP_DEFAULTS.fpsPerInch, fpsPerDegF: SETUP_DEFAULTS.fpsPerDegF });
+    saveSetup(); renderSetupPanel(); renderVelocity(); renderResults();
   });
-  setupInit();
 
   // load log
   $('#btn-add-log').addEventListener('click', () => openLogEntry(state.selectedLoadId ? { loadId: state.selectedLoadId } : null));
   $('#btn-save-log').addEventListener('click', saveLogEntry);
-  $('#btn-cancel-log').addEventListener('click', () => $('#log-back').classList.remove('open'));
+  $('#btn-cancel-log').addEventListener('click', () => closeModal('#log-back'));
   $('#btn-export-log').addEventListener('click', exportLog);
   $('#btn-import-log').addEventListener('click', () => $('#file-import-log').click());
   $('#file-import-log').addEventListener('change', (e) => { if (e.target.files[0]) importLog(e.target.files[0]); e.target.value = ''; });
@@ -1710,7 +1935,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // library toolbar
   $('#btn-add-load').addEventListener('click', () => openEdit(null));
   $('#btn-save-load').addEventListener('click', saveEdit);
-  $('#btn-cancel-load').addEventListener('click', () => $('#edit-back').classList.remove('open'));
+  $('#btn-cancel-load').addEventListener('click', () => closeModal('#edit-back'));
   $('#btn-export').addEventListener('click', exportLibrary);
   $('#btn-import').addEventListener('click', () => $('#file-import').click());
   $('#file-import').addEventListener('change', (e) => { if (e.target.files[0]) importLibrary(e.target.files[0]); e.target.value = ''; });
@@ -1722,14 +1947,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // first-run acknowledgement
+  // Escape closes the log and edit dialogs (never the safety acknowledgement)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if ($('#log-back').classList.contains('open')) closeModal('#log-back');
+    else if ($('#edit-back').classList.contains('open')) closeModal('#edit-back');
+  });
+
+  // first-run acknowledgement: the rest of the page is inert until it is answered
   let acked = false;
   try { acked = localStorage.getItem(LS_ACK) === 'yes'; } catch (e) {}
-  if (!acked) $('#ack-back').classList.add('open');
+  if (!acked) openModal('#ack-back', '#btn-ack');
   $('#btn-ack').addEventListener('click', () => {
     try { localStorage.setItem(LS_ACK, 'yes'); } catch (e) {}
-    $('#ack-back').classList.remove('open');
+    closeModal('#ack-back');
   });
+
+  if (startupNotices.length) {
+    const n = $('#app-notice');
+    n.textContent = startupNotices.join(' ');
+    n.style.display = 'block';
+  }
 
   $('#about-version').textContent = 'Built-in library version ' + BUILTIN_VERSION + ', compiled ' + LIBRARY_BUILD_DATE + ' from publishers’ free online load data. ' + BUILTIN_LOADS.length + ' loads.';
 
