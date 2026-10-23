@@ -744,9 +744,12 @@ function safeUrl(u) {
   } catch (e) { return null; }
 }
 const onGrid = (v) => Math.abs(v * 10 - Math.round(v * 10)) <= 1e-6; // 0.1 gr resolution
-const asText = (v, max) => (typeof v === 'string' && v.trim()) ? v.trim().slice(0, max) : undefined;
+const asText = (v) => (typeof v === 'string' && v.trim()) ? v.trim() : undefined;
 const asNum = (v) => isNum(v) ? v : undefined;
 const dropNulls = (o) => { Object.keys(o).forEach(k => { if (o[k] === null) delete o[k]; }); return o; };
+// Identity text is compared with runs of whitespace collapsed, so stray spaces in an
+// imported file can never detach range data from its load.
+const canon = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
 
 const LOAD_TEXT_FIELDS = ['cartridge','powder','bulletDesc','primer','caseBrand','maxPressure','sourceName','sourceUrl','loadNotes','startRule'];
 const LOAD_NUM_FIELDS = ['bulletWeightGr','startChargeGr','startVelocityFps','maxChargeGr','maxVelocityFps','coalIn','barrelLengthIn'];
@@ -756,13 +759,35 @@ function matchesBuiltin(l) {
 }
 // A log entry and a load describe the same load when these four fields agree.
 function sameLoadIdentity(a, b) {
-  return a.cartridge === b.cartridge && a.powder === b.powder && a.bulletDesc === b.bulletDesc && a.bulletWeightGr === b.bulletWeightGr;
+  return canon(a.cartridge) === canon(b.cartridge) && canon(a.powder) === canon(b.powder) &&
+         canon(a.bulletDesc) === canon(b.bulletDesc) && a.bulletWeightGr === b.bulletWeightGr;
+}
+// Bring a stored or imported load record to the types the app expects without
+// throwing information away: nulls are removed, numbers written as text become
+// numbers, numbers in text fields become text, identity text is whitespace-normalized
+// and an unsafe source link is dropped. Only fields that cannot be repaired are removed.
+function repairLoad(raw) {
+  const l = dropNulls(Object.assign({}, raw));
+  LOAD_NUM_FIELDS.forEach(k => {
+    if (l[k] === undefined || isNum(l[k])) return;
+    const n = (typeof l[k] === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(l[k])) ? Number(l[k]) : NaN;
+    if (isFinite(n)) l[k] = n; else delete l[k];
+  });
+  LOAD_TEXT_FIELDS.forEach(k => {
+    if (l[k] === undefined || typeof l[k] === 'string') return;
+    if (isNum(l[k])) l[k] = String(l[k]); else delete l[k];
+  });
+  ['cartridge', 'powder', 'bulletDesc'].forEach(k => { if (typeof l[k] === 'string') l[k] = canon(l[k]); });
+  if (l.sourceUrl && !safeUrl(l.sourceUrl)) delete l.sourceUrl;
+  return l;
 }
 
 /* ============================ storage ============================ */
 const LS_LIB = 'rc.library.v' + BUILTIN_VERSION;
 const LS_ACK = 'rc.ack.v1';
+const LS_SET_ASIDE = 'rc.library.unreadable';
 const startupNotices = [];
+const libIdRemap = {};   // old load id -> new id, filled by a library migration
 
 function seedLibrary() {
   return BUILTIN_LOADS.map((l, i) => Object.assign({ id: 'b' + i, origin: 'builtin' }, l));
@@ -774,6 +799,34 @@ function sanitizeIds(arr) {
     seen.add(l.id);
   });
   return arr;
+}
+// Records that cannot be used are set aside under their own key, never deleted, so a
+// later save of the library cannot erase them. Returns false if storage refused.
+function setAside(records, key) {
+  key = key || LS_SET_ASIDE;
+  try {
+    const prev = JSON.parse(localStorage.getItem(key) || '[]');
+    const all = Array.isArray(prev) ? prev : [];
+    const seen = new Set(all.map(r => JSON.stringify(r)));
+    records.forEach(r => { const k = JSON.stringify(r); if (!seen.has(k)) { seen.add(k); all.push(r); } });
+    localStorage.setItem(key, JSON.stringify(all));
+    return true;
+  } catch (e) { return false; }
+}
+// Built-in rows saved by an earlier build of this library version are refreshed from
+// the current data (for example a caution note added since), matched by id and identity.
+function refreshBuiltins(arr) {
+  let n = 0;
+  arr.forEach(l => {
+    if (l.origin !== 'builtin') return;
+    const m = /^b(\d+)$/.exec(l.id || '');
+    const b = m ? BUILTIN_LOADS[+m[1]] : null;
+    if (!b || !sameLoadIdentity(b, l) || b.sourceUrl !== l.sourceUrl) return;
+    let changed = false;
+    PROVENANCE_FIELDS.forEach(k => { if (l[k] !== b[k]) { changed = true; if (b[k] === undefined) delete l[k]; else l[k] = b[k]; } });
+    if (changed) { l.verified = 'confirmed'; n++; }
+  });
+  return n;
 }
 // When BUILTIN_VERSION changes, the library moves to a new storage key. Carry the
 // user's own and imported loads forward from the newest older key so they are not
@@ -787,11 +840,26 @@ function migrateOldLibrary() {
   if (!bestKey) return null;
   const arr = JSON.parse(localStorage.getItem(bestKey));
   if (!Array.isArray(arr)) return null;
-  const carried = arr
-    .filter(l => l && typeof l === 'object' && l.origin !== 'builtin')
-    .map(l => { const c = dropNulls(Object.assign({}, l)); delete c.verified; if (c.origin !== 'user') c.origin = 'imported'; return c; })
-    .filter(l => !validateLoad(l).length && !matchesBuiltin(l));
-  return { version: bestV, carried };
+  const carried = [];
+  let left = 0;
+  arr.forEach(r => {
+    if (!r || typeof r !== 'object' || Array.isArray(r) || r.origin === 'builtin') return;
+    const l = repairLoad(r);
+    delete l.verified;
+    if (l.origin !== 'user') l.origin = 'imported';
+    if (validateLoad(l).length) left++;
+    else if (!matchesBuiltin(l)) carried.push(l);
+  });
+  // An edited built-in keeps its old 'b<n>' id, which the fresh built-ins now use.
+  // Give carried loads their own ids and remember the change so log entries follow.
+  const seededIds = new Set(BUILTIN_LOADS.map((_, i) => 'b' + i));
+  carried.forEach((l, i) => {
+    if (typeof l.id === 'string' && l.id && !seededIds.has(l.id)) return;
+    const nid = 'm' + bestV + '_' + i;
+    if (typeof l.id === 'string' && l.id) libIdRemap[l.id] = nid;
+    l.id = nid;
+  });
+  return { version: bestV, carried, left };
 }
 function loadLibrary() {
   try {
@@ -799,9 +867,25 @@ function loadLibrary() {
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        // skip records that would break rendering (e.g. left by an older import)
-        const ok = arr.filter(l => l && typeof l === 'object' && !validateLoad(l).length);
-        if (ok.length < arr.length) startupNotices.push((arr.length - ok.length) + ' saved load(s) were unreadable and have been skipped.');
+        const ok = [], bad = [];
+        arr.forEach(r => {
+          if (!r || typeof r !== 'object' || Array.isArray(r)) { bad.push(r); return; }
+          const l = repairLoad(r);
+          if (validateLoad(l).length) bad.push(r); else ok.push(l);
+        });
+        const refreshed = refreshBuiltins(ok);
+        if (bad.length) {
+          if (setAside(bad)) {
+            startupNotices.push(bad.length + ' saved load(s) could not be used and were set aside (not deleted) in this browser’s storage under “' + LS_SET_ASIDE + '”.');
+            saveLibrary(ok);
+          } else {
+            // could not set them aside: keep them in storage, unseen, rather than risk losing them
+            startupNotices.push(bad.length + ' saved load(s) could not be used. Export your library before making changes.');
+            return sanitizeIds(ok);
+          }
+        } else if (refreshed) {
+          saveLibrary(ok);
+        }
         return sanitizeIds(ok);
       }
     }
@@ -811,8 +895,10 @@ function loadLibrary() {
   try { mig = migrateOldLibrary(); } catch (e) { mig = null; }
   const lib = (mig && mig.carried.length) ? sanitizeIds(seeded.concat(mig.carried)) : seeded;
   saveLibrary(lib);
-  if (mig && mig.carried.length) {
-    startupNotices.push('Built-in library updated to version ' + BUILTIN_VERSION + '. Your ' + mig.carried.length + ' own/imported load(s) from version ' + mig.version + ' were carried over.');
+  if (mig && (mig.carried.length || mig.left)) {
+    startupNotices.push('Built-in library updated to version ' + BUILTIN_VERSION + '. ' +
+      (mig.carried.length ? 'Your ' + mig.carried.length + ' own/imported load(s) from version ' + mig.version + ' were carried over. ' : '') +
+      (mig.left ? mig.left + ' load(s) could not be read and remain stored under version ' + mig.version + '.' : ''));
   }
   return lib;
 }
@@ -852,17 +938,22 @@ const state = {
   editingId: null,
 };
 
-// Older versions kept one barrel length for every cartridge, which pushed a rifle
-// barrel onto handgun data. Keep that value only for cartridges whose loads all come
-// from rifle-length test barrels; handgun cartridges start without one.
+// Older versions kept one barrel length for every cartridge. It moves to the
+// cartridges it plausibly belongs to: a rifle-length value (10" or more) to
+// cartridges whose test barrels are all rifle-length, a shorter value to cartridges
+// whose test barrels are all handgun-length. The user is told where it went.
 if (isNum(state.setup.barrelIn)) {
-  const tests = {};
+  const legacy = state.setup.barrelIn, rifle = legacy >= 10, tests = {}, got = [];
   state.lib.forEach(l => { (tests[l.cartridge] = tests[l.cartridge] || []).push(l.barrelLengthIn); });
-  Object.keys(tests).forEach(c => {
-    if (tests[c].every(b => isNum(b) && b >= 10) && !isNum(state.setup.barrelByCart[c])) state.setup.barrelByCart[c] = state.setup.barrelIn;
+  Object.keys(tests).sort().forEach(c => {
+    const fits = tests[c].every(b => isNum(b) && (rifle ? b >= 10 : b < 10));
+    if (fits && !isNum(state.setup.barrelByCart[c])) { state.setup.barrelByCart[c] = legacy; got.push(c); }
   });
   delete state.setup.barrelIn;
   saveSetup();
+  startupNotices.push('Your barrel length (' + legacy + '″) is now saved per cartridge. It was applied to ' +
+    (got.length ? 'your ' + got.length + ' ' + (rifle ? 'rifle' : 'handgun') + ' cartridge(s)' : 'no cartridges') +
+    '; check it under “Your rifle & conditions” for each cartridge you shoot.');
 }
 
 function barrelFor(cart) {
@@ -1283,24 +1374,40 @@ function showTab(name) {
    screen-reader users cannot operate the page (the safety acknowledgement in
    particular must be answered first). Log and edit modals close on Escape. */
 const MODAL_BACKGROUND = ['.safety-strip', '#storage-warn', '#app-notice', '#render-error', 'header.app', 'nav.tabs', 'main', 'footer.app'];
-let modalReturnFocus = null;
+let modalReturnFocus = null, modalReturnSel = null;
 function setBackgroundInert(on) {
   MODAL_BACKGROUND.forEach(sel => document.querySelectorAll(sel).forEach(el => { el.inert = on; }));
 }
+// A selector that finds the opener again after its section has been re-rendered.
+function reFindSelector(el) {
+  if (!el || el === document.body) return null;
+  if (el.id) return '#' + CSS.escape(el.id);
+  for (const a of ['data-logedit', 'data-edit', 'data-id']) {
+    if (el.hasAttribute(a)) return '[' + a + '="' + CSS.escape(el.getAttribute(a)) + '"]';
+  }
+  return null;
+}
 function openModal(id, focusSel) {
   const back = $(id);
-  if (!document.querySelector('.modal-back.open')) modalReturnFocus = document.activeElement;
+  if (!document.querySelector('.modal-back.open')) {
+    modalReturnFocus = document.activeElement;
+    modalReturnSel = reFindSelector(modalReturnFocus);
+  }
   back.classList.add('open');
   setBackgroundInert(true);
   const target = (focusSel && $(focusSel)) || back.querySelector('input, select, button');
   if (target) target.focus();
 }
+// Callers that re-render after a save do so BEFORE closing, so focus can return
+// to the (re-rendered) control that opened the dialog.
 function closeModal(id) {
   $(id).classList.remove('open');
   if (!document.querySelector('.modal-back.open')) {
     setBackgroundInert(false);
-    if (modalReturnFocus && document.contains(modalReturnFocus)) modalReturnFocus.focus();
-    modalReturnFocus = null;
+    const back = (modalReturnFocus && document.contains(modalReturnFocus)) ? modalReturnFocus
+      : (modalReturnSel ? document.querySelector(modalReturnSel) : null);
+    if (back) back.focus();
+    modalReturnFocus = null; modalReturnSel = null;
   }
 }
 
@@ -1363,8 +1470,8 @@ function openEdit(id) {
 function validateLoad(rec) {
   const problems = [];
   // text fields must be text and numeric fields must be numbers (a "5.3" string is
-  // rejected, not silently treated as missing)
-  LOAD_TEXT_FIELDS.forEach(k => { if (rec[k] !== undefined && (typeof rec[k] !== 'string' || rec[k].length > 500)) problems.push(k + ' must be text'); });
+  // rejected, not silently treated as missing; repairLoad converts such values first)
+  LOAD_TEXT_FIELDS.forEach(k => { if (rec[k] !== undefined && typeof rec[k] !== 'string') problems.push(k + ' must be text'); });
   LOAD_NUM_FIELDS.forEach(k => { if (rec[k] !== undefined && !isNum(rec[k])) problems.push(k + ' must be a number'); });
   if (typeof rec.cartridge !== 'string' || !rec.cartridge.trim()) problems.push('cartridge is required');
   if (typeof rec.powder !== 'string' || !rec.powder.trim()) problems.push('powder is required');
@@ -1420,10 +1527,12 @@ function saveEdit() {
     }
     Object.keys(rec).forEach(k => { if (rec[k] === undefined) delete l[k]; else l[k] = rec[k]; });
     if (wasBuiltin) { l.origin = 'user'; delete l.verified; } // edited data is no longer the verified transcription
-    if (moveLog !== null) {
+    if (attached.length) {
       attached.forEach(e => {
+        if (moveLog === false) { delete e.loadId; return; }   // stays under the old load
         if (moveLog) { e.loadId = l.id; e.cartridge = l.cartridge; e.bulletDesc = l.bulletDesc; e.bulletWeightGr = l.bulletWeightGr; e.powder = l.powder; }
-        else delete e.loadId;
+        delete e.loadSource;
+        Object.assign(e, entryFingerprint(l));                 // remember the edited max/source
       });
       saveLog();
     }
@@ -1434,8 +1543,8 @@ function saveEdit() {
     state.lib.push(rec);
   }
   saveLibrary(state.lib);
-  closeModal('#edit-back');
   refreshAll();
+  closeModal('#edit-back');
 }
 
 /* ============================ import / export / restore ============================ */
@@ -1457,8 +1566,7 @@ function importLibrary(file) {
       if (!Array.isArray(arr)) throw new Error('not an array');
       arr.forEach(raw => {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { skipped++; return; }
-        const l = dropNulls(Object.assign({}, raw));
-        if (l.sourceUrl && !safeUrl(l.sourceUrl)) delete l.sourceUrl;
+        const l = repairLoad(raw);   // e.g. "5.3" -> 5.3, null -> absent, unsafe link dropped
         if (validateLoad(l).length) { skipped++; return; }
         // the verified badge is earned, not imported: only entries identical
         // to the built-in data keep it — anything else must be re-checked
@@ -1487,18 +1595,21 @@ function importLibrary(file) {
 /* ============================ load log ============================ */
 const LS_LOG = 'rc.loadlog.v1';
 // Build a clean log entry from untrusted data (an imported file or older storage):
-// known keys only, each with the right type, stats recomputed from the shots.
+// known keys only, each with the right type, stats recomputed from the shots. Text
+// is never shortened; identity text is whitespace-normalized like the library's.
+const asIdText = (v) => (typeof v === 'string' && canon(v)) ? canon(v) : undefined;
 function normalizeLogEntry(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const e = {
-    id: asText(raw.id, 40), loadId: asText(raw.loadId, 60),
-    cartridge: asText(raw.cartridge, 120), bulletDesc: asText(raw.bulletDesc, 200), bulletWeightGr: asNum(raw.bulletWeightGr), powder: asText(raw.powder, 120),
-    date: asText(raw.date, 20), chargeGr: asNum(raw.chargeGr), rounds: asNum(raw.rounds), tempF: asNum(raw.tempF),
+    id: asText(raw.id), loadId: asText(raw.loadId),
+    cartridge: asIdText(raw.cartridge), bulletDesc: asIdText(raw.bulletDesc), bulletWeightGr: asNum(raw.bulletWeightGr), powder: asIdText(raw.powder),
+    loadMaxGr: asNum(raw.loadMaxGr), loadSource: asText(raw.loadSource),
+    date: asText(raw.date), chargeGr: asNum(raw.chargeGr), rounds: asNum(raw.rounds), tempF: asNum(raw.tempF),
     shots: Array.isArray(raw.shots) ? raw.shots.filter(isNum) : undefined,
     avgFps: asNum(raw.avgFps), sdFps: asNum(raw.sdFps), esFps: asNum(raw.esFps), n: asNum(raw.n),
-    rifle: asText(raw.rifle, 120), groupIn: asNum(raw.groupIn), groupYd: asNum(raw.groupYd),
-    pressure: Array.isArray(raw.pressure) ? raw.pressure.filter(p => typeof p === 'string' && p.trim()).map(p => p.trim().slice(0, 60)) : [],
-    notes: asText(raw.notes, 1000),
+    rifle: asText(raw.rifle), groupIn: asNum(raw.groupIn), groupYd: asNum(raw.groupYd),
+    pressure: Array.isArray(raw.pressure) ? raw.pressure.filter(p => typeof p === 'string' && p.trim()).map(p => p.trim()) : [],
+    notes: asText(raw.notes),
   };
   if (!e.cartridge || !e.powder || !isNum(e.chargeGr) || e.chargeGr <= 0) return null;
   const st = e.shots && e.shots.length ? shotStats(e.shots) : null;
@@ -1507,14 +1618,34 @@ function normalizeLogEntry(raw) {
   Object.keys(e).forEach(k => { if (e[k] === undefined) delete e[k]; });
   return e;
 }
+const LS_LOG_SET_ASIDE = 'rc.loadlog.unreadable';
 function loadLog() {
   try {
     const raw = localStorage.getItem(LS_LOG);
     if (raw) {
       const a = JSON.parse(raw);
       if (Array.isArray(a)) {
-        const ok = a.map(normalizeLogEntry).filter(Boolean);
-        if (ok.length < a.length) startupNotices.push((a.length - ok.length) + ' saved log entr' + (a.length - ok.length === 1 ? 'y was' : 'ies were') + ' unreadable and have been skipped.');
+        const ok = [], bad = [];
+        a.forEach(r => { const e = normalizeLogEntry(r); if (e) ok.push(e); else bad.push(r); });
+        // every entry needs its own string id so it can be edited and deleted
+        let changed = false;
+        const seen = new Set();
+        ok.forEach((e, i) => {
+          if (!e.id || seen.has(e.id)) { e.id = 'gf' + i + '_' + Math.random().toString(36).slice(2, 7); changed = true; }
+          seen.add(e.id);
+          if (e.loadId && libIdRemap[e.loadId]) { e.loadId = libIdRemap[e.loadId]; changed = true; }
+        });
+        if (bad.length) {
+          // set unusable entries aside (never delete them) before the cleaned log is saved
+          if (setAside(bad, LS_LOG_SET_ASIDE)) {
+            startupNotices.push(bad.length + ' saved log entr' + (bad.length === 1 ? 'y' : 'ies') + ' could not be used and ' + (bad.length === 1 ? 'was' : 'were') + ' set aside (not deleted) in this browser’s storage under “' + LS_LOG_SET_ASIDE + '”.');
+          } else {
+            startupNotices.push(bad.length + ' saved log entr' + (bad.length === 1 ? 'y' : 'ies') + ' could not be used. Export your log before making changes.');
+            return ok;
+          }
+          changed = true;
+        }
+        if (changed) { try { localStorage.setItem(LS_LOG, JSON.stringify(ok)); } catch (e) {} }
         return ok;
       }
     }
@@ -1539,7 +1670,22 @@ function shotStats(shots) {
 function loadForEntry(e) {
   const byId = e.loadId ? state.lib.find(l => l.id === e.loadId) : null;
   if (byId && sameLoadIdentity(e, byId)) return byId;
-  return state.lib.find(l => sameLoadIdentity(e, l)) || null;
+  const cands = state.lib.filter(l => sameLoadIdentity(e, l));
+  if (cands.length <= 1) return cands[0] || null;
+  // Several loads share this cartridge, bullet and powder (e.g. the same bullet from two
+  // manuals). Prefer the one the entry was recorded against, recognised by its published
+  // max and source; otherwise use the lowest max so an over-max charge is never hidden.
+  const exact = cands.filter(l => isNum(e.loadMaxGr) && l.maxChargeGr === e.loadMaxGr &&
+    (e.loadSource === undefined || (l.sourceUrl || l.sourceName || '') === e.loadSource));
+  if (exact.length) return exact[0];
+  return cands.reduce((a, b) => (b.maxChargeGr < a.maxChargeGr ? b : a));
+}
+// What an entry remembers about the load it was recorded against (used above).
+function entryFingerprint(l) {
+  const fp = { loadMaxGr: l.maxChargeGr };
+  const src = l.sourceUrl || l.sourceName;
+  if (src) fp.loadSource = src;
+  return fp;
 }
 function logEntriesFor(l) {
   return state.log.filter(e => loadForEntry(e) === l)
@@ -1634,7 +1780,7 @@ function saveLogEntry() {
   const st = shotStats(shots);
   const e = {
     id: state.logEditing || ('g' + Math.random().toString(36).slice(2, 9)),
-    loadId: l.id, cartridge: l.cartridge, bulletDesc: l.bulletDesc, bulletWeightGr: l.bulletWeightGr, powder: l.powder,
+    loadId: l.id, cartridge: l.cartridge, bulletDesc: l.bulletDesc, bulletWeightGr: l.bulletWeightGr, powder: l.powder, ...entryFingerprint(l),
     date: $('#g-date').value.trim() || undefined,
     chargeGr, rounds: num('#g-rounds'), tempF: num('#g-temp'),
     shots: st ? shots : undefined,
@@ -1648,8 +1794,8 @@ function saveLogEntry() {
   const i = state.log.findIndex(x => x.id === e.id);
   if (i >= 0) state.log[i] = e; else state.log.push(e);
   saveLog();
-  closeModal('#log-back');
   renderLog(); renderRecipe();
+  closeModal('#log-back');
 }
 function exportLog() {
   const blob = new Blob([JSON.stringify(state.log, null, 2)], { type: 'application/json' });
@@ -1790,7 +1936,11 @@ function ballisticsFillFromRecipe() {
   const c = calcForLoad(l, state.targetVel - d);
   const logged = logEntriesFor(l).filter(e => isNum(e.avgFps)).pop();
   let mv, src;
-  if (logged) { mv = logged.avgFps; src = 'your logged average (' + fmt0(mv) + ' fps' + (logged.date ? ', ' + logged.date : '') + ')'; }
+  if (logged) {
+    mv = logged.avgFps;
+    src = 'your logged average (' + fmt0(mv) + ' fps' + (logged.date ? ', ' + logged.date : '') + ')';
+    if (logged.chargeGr > l.maxChargeGr + 1e-9) src += ' — WARNING: that session’s charge (' + fmt1(logged.chargeGr) + ' gr) was ABOVE the published maximum';
+  }
   // 'below' means the recipe says load the published START charge, so use the start velocity
   else if (isNum(c.estVel)) { mv = c.estVel + d; src = (c.status === 'below' ? 'published start ' : 'estimated ') + fmt0(mv) + ' fps' + (d !== 0 ? ' in your setup' : ' (test barrel)'); }
   else { mv = l.maxVelocityFps + d; src = 'published max ' + fmt0(mv) + ' fps'; }
@@ -1804,7 +1954,11 @@ function ballisticsFillFromRecipe() {
   else { $('#b-bc').value = ''; $('#b-model').value = 'G1'; }
   if (isNum(state.setup.tempF)) $('#b-temp').value = state.setup.tempF;
   note.textContent = l.bulletWeightGr + ' gr ' + l.bulletDesc + ' · ' + l.powder + ' — velocity from ' + src + '. Enter the bullet maker’s BC.';
-  if (!$('#b-bc').value) $('#b-bc').focus(); else renderBallistics();
+  if (!$('#b-bc').value) {
+    // don't leave the previous bullet's table on screen under this bullet's inputs
+    $('#bal-results').innerHTML = '<p class="empty-note">Enter the bullet maker’s BC for this bullet, then Calculate.</p>';
+    $('#b-bc').focus();
+  } else renderBallistics();
 }
 
 /* ============================ wiring ============================ */
