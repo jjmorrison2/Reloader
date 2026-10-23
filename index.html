@@ -247,6 +247,57 @@
   .modal .formgrid label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 3px; }
   .modal .full { grid-column: 1 / -1; }
   .ack-list { margin: 0 0 6px; padding-left: 20px; }
+
+  /* ---------- target photo marking ---------- */
+  .tgt-summary { margin-top: 8px; font-size: 13.5px; }
+  .tgt-summary .tgt-mini { display: inline-block; vertical-align: middle; margin-right: 8px; }
+  .tgt-back { z-index: 60; padding: 0; align-items: flex-start; }
+  .tgt-modal {
+    background: var(--surface); width: 100%; max-width: 1000px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 0; min-height: 100%;
+  }
+  .tgt-modal > * { flex-shrink: 0; }
+  .tgt-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+  .tgt-head h2 { margin: 0; font-size: 18px; }
+  .tgt-steps { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; }
+  .tgt-steps button {
+    appearance: none; font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 999px; cursor: pointer;
+    padding: 3px 10px; border: 1px solid var(--baseline); background: var(--page); color: var(--ink-2);
+  }
+  .tgt-steps li.current button { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tgt-steps li.done button { color: var(--good-text); border-color: var(--good); }
+  .tgt-instr { margin: 0; font-size: 14px; }
+  .tgt-radios { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
+  .tgt-radios label { display: inline-flex; gap: 6px; align-items: center; }
+  .tgt-dims { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 6px; }
+  .tgt-dims label, .tgt-dist-inline label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 3px; }
+  .tgt-dims input { width: 140px; }
+  .tgt-stage { position: relative; flex: 1 0 auto; min-height: 260px; height: 56vh; background: #222; border-radius: 10px; overflow: hidden; }
+  .tgt-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+  .tgt-stage canvas:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+  .tgt-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+  .tgt-dist-inline { margin-left: auto; }
+  .tgt-dist-inline input { width: 100px; padding: 4px 8px; }
+  .tgt-results { font-size: 14px; min-height: 1.5em; }
+  .tgt-results .tgt-big { font-size: 22px; font-weight: 650; }
+  .tgt-results .cf-sum, .tgt-summary .cf-sum { color: var(--ink-2); font-weight: 500; }
+  .tgt-results table { border-collapse: collapse; margin-top: 4px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .tgt-results td, .tgt-results th { padding: 2px 10px 2px 0; text-align: left; }
+  .tgt-results th { color: var(--ink-2); font-weight: 600; }
+  /* always reachable on a phone, however far the results run */
+  .tgt-actions {
+    position: sticky; bottom: 0; z-index: 1; margin: 0 -14px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface); border-top: 1px solid var(--border);
+  }
+  .tgtview-photo svg { display: block; width: 100%; height: auto; border-radius: 8px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 70; width: max-content;
+    background: var(--ink); color: var(--page); border-radius: 12px; padding: 10px 12px;
+    display: flex; gap: 10px; align-items: center; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: 14px;
+  }
+  .toast[hidden] { display: none; }
+  .rowbtn.tgt-view { display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; margin-top: 2px; }
+  .toast .btn { padding: 5px 10px; white-space: nowrap; flex-shrink: 0; }
   .ack-list li { margin-bottom: 9px; font-size: 14px; }
 
   footer.app {
@@ -499,6 +550,18 @@
       <div><label for="g-rifle">Rifle / barrel</label><input type="text" id="g-rifle" placeholder='e.g. Tikka T3x 22.4"'></div>
       <div><label for="g-group">Group size (in)</label><input type="number" id="g-group" step="0.01" min="0"></div>
       <div><label for="g-groupyd">Group distance (yd)</label><input type="number" id="g-groupyd" step="1" min="1" value="100"></div>
+      <div class="full tgt-block">
+        <label id="tgt-label">Target photo (optional) &mdash; mark each hole and the group is measured for you</label>
+        <div class="btn-row" style="margin-top:4px" role="group" aria-labelledby="tgt-label">
+          <button type="button" class="btn" id="tgt-take">&#128247; Take photo</button>
+          <button type="button" class="btn" id="tgt-choose">Choose photo</button>
+          <button type="button" class="btn" id="tgt-edit" hidden>Edit marks</button>
+          <button type="button" class="btn danger" id="tgt-remove" hidden>Remove target</button>
+        </div>
+        <input type="file" id="tgt-file-cam" accept="image/*" capture="environment" hidden>
+        <input type="file" id="tgt-file" accept="image/*" hidden>
+        <div id="tgt-summary" class="tgt-summary"></div>
+      </div>
       <div class="full"><label id="g-ps-label">Pressure signs</label>
         <div role="group" aria-labelledby="g-ps-label" style="display:flex;flex-wrap:wrap;gap:10px;font-size:13px">
           <label style="display:inline-flex;align-items:center;gap:4px;text-transform:none;font-weight:500"><input type="checkbox" class="g-ps" value="flattened primers"> flattened primers</label>
@@ -516,6 +579,60 @@
     </div>
   </div>
 </div>
+
+<!-- ================= TARGET MARKER (full screen) ================= -->
+<div class="modal-back tgt-back" id="tgt-back">
+  <div class="tgt-modal" role="dialog" aria-modal="true" aria-labelledby="tgt-title">
+    <div class="tgt-head">
+      <h2 id="tgt-title">Mark the target</h2>
+      <ol class="tgt-steps" aria-label="Steps">
+        <li data-step="scale"><button type="button" data-goto="scale">1&nbsp;Scale</button></li>
+        <li data-step="aim"><button type="button" data-goto="aim">2&nbsp;Aim point</button></li>
+        <li data-step="shots"><button type="button" data-goto="shots">3&nbsp;Shots</button></li>
+      </ol>
+    </div>
+    <p class="tgt-instr" id="tgt-instr" role="status" aria-live="polite"></p>
+    <div class="tgt-scale-opts" id="tgt-scale-opts">
+      <div role="radiogroup" aria-label="How to set the scale" class="tgt-radios">
+        <label><input type="radio" name="tgt-method" value="2pt" checked> Two points a known distance apart</label>
+        <label><input type="radio" name="tgt-method" value="4pt"> Four corners of a known rectangle (corrects an angled photo)</label>
+      </div>
+      <div class="tgt-dims">
+        <div id="tgt-dist-wrap"><label for="tgt-dist">Distance between the points (in)</label><input type="number" id="tgt-dist" step="0.01" min="0.1" value="1"></div>
+        <div id="tgt-rect-wrap" hidden><label for="tgt-rw">Rectangle width (in)</label><input type="number" id="tgt-rw" step="0.01" min="0.1" value="1"></div>
+        <div id="tgt-rect-wrap2" hidden><label for="tgt-rh">Rectangle height (in)</label><input type="number" id="tgt-rh" step="0.01" min="0.1" value="1"></div>
+      </div>
+    </div>
+    <div class="tgt-stage" id="tgt-stage">
+      <canvas id="tgt-canvas" tabindex="0" aria-label="Target photo. Tap to place a mark, press and hold for a magnifier, drag a mark to move it, pinch to zoom. With a keyboard: arrow keys move the crosshair (Shift for bigger steps), Enter places a mark, Delete removes the last one."></canvas>
+    </div>
+    <div class="tgt-tools">
+      <button type="button" class="btn btn-sm" id="tgt-undo">Undo</button>
+      <button type="button" class="btn btn-sm" id="tgt-zoom-out" aria-label="Zoom out">&minus;</button>
+      <button type="button" class="btn btn-sm" id="tgt-zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" class="btn btn-sm" id="tgt-fit">Fit</button>
+      <span class="tgt-dist-inline"><label for="tgt-yd">Distance to target (yd)</label><input type="number" id="tgt-yd" step="1" min="1" value="100"></span>
+    </div>
+    <div class="tgt-results" id="tgt-results" role="status" aria-live="polite"></div>
+    <div class="btn-row tgt-actions">
+      <button type="button" class="btn" id="tgt-back-step">Back</button>
+      <button type="button" class="btn primary" id="tgt-next">Next</button>
+      <button type="button" class="btn primary" id="tgt-done" hidden>Use these results</button>
+      <button type="button" class="btn" id="tgt-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TARGET VIEWER ================= -->
+<div class="modal-back" id="tgtview-back">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tgtview-title">
+    <h2 id="tgtview-title">Target</h2>
+    <div id="tgtview-body"></div>
+    <div class="btn-row"><button type="button" class="btn" id="tgtview-close">Close</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <!-- ================= ADD/EDIT LOAD MODAL ================= -->
 <div class="modal-back" id="edit-back">
@@ -1831,6 +1948,7 @@ function renderRecipe() {
   $('#btn-bal-this')?.addEventListener('click', () => { showTab('ballistics'); ballisticsFillFromRecipe(); });
   holder.querySelectorAll('[data-logedit]').forEach(b => b.addEventListener('click', () => openLogEntry(state.log.find(e => e.id === b.dataset.logedit))));
   holder.querySelectorAll('[data-logdel]').forEach(b => b.addEventListener('click', () => deleteLogEntry(b.dataset.logdel)));
+  holder.querySelectorAll('[data-tgtview]').forEach(b => b.addEventListener('click', () => openTargetViewer(b.dataset.tgtview)));
   // case fill: recompute as the user types, remember measurements when a field is left
   const cfBox = $('#cf-box');
   if (cfBox) {
@@ -1847,6 +1965,7 @@ function deleteLogEntry(id) {
   const e = state.log.find(x => x.id === id);
   if (e && confirm('Delete the ' + (e.date || '') + ' log entry for ' + e.powder + ' ' + fmt1(e.chargeGr) + ' gr?')) {
     state.log = state.log.filter(x => x.id !== id);
+    TargetPhotos.del(id);
     saveLog(); renderLog(); renderRecipe();
   }
 }
@@ -1864,7 +1983,7 @@ function showTab(name) {
    While a modal is open, everything behind it is made inert so keyboard and
    screen-reader users cannot operate the page (the safety acknowledgement in
    particular must be answered first). Log and edit modals close on Escape. */
-const MODAL_BACKGROUND = ['.safety-strip', '#storage-warn', '#app-notice', '#render-error', 'header.app', 'nav.tabs', 'main', 'footer.app'];
+const MODAL_BACKGROUND = ['.safety-strip', '#storage-warn', '#app-notice', '#render-error', 'header.app', 'nav.tabs', 'main', 'footer.app', '#toast'];
 let modalReturnFocus = null, modalReturnSel = null;
 function setBackgroundInert(on) {
   MODAL_BACKGROUND.forEach(sel => document.querySelectorAll(sel).forEach(el => { el.inert = on; }));
@@ -2131,6 +2250,10 @@ function normalizeLogEntry(raw) {
     if (typeof raw.pressure === 'string' && raw.pressure.trim()) e.pressure = [raw.pressure.trim()];
     else keep.pressure = raw.pressure;
   }
+  if (raw.target != null) {
+    const t = normalizeTarget(raw.target);
+    if (t) e.target = t; else keep.target = raw.target;
+  }
   if (!e.cartridge || !e.powder || !isNum(e.chargeGr) || e.chargeGr <= 0) return null;
   const st = e.shots ? shotStats(e.shots) : null;
   if (st) { e.avgFps = st.avg; e.sdFps = st.sd; e.esFps = st.es; e.n = st.n; }
@@ -2254,7 +2377,9 @@ function logRowHTML(e, showLoad) {
     (showLoad ? '<td>' + esc((isNum(e.bulletWeightGr) ? e.bulletWeightGr + ' gr ' : '') + (e.bulletDesc || '')) + '<br><span style="color:var(--ink-2)">' + esc(e.powder) + '</span></td>' : '') +
     '<td class="num">' + fmt1(e.chargeGr) + ' gr' + chargeFlagHTML(e) + '</td>' +
     '<td class="num">' + (isNum(e.avgFps) ? fmt0(e.avgFps) + stats : '—') + '</td>' +
-    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + fmt0(isNum(e.groupYd) ? e.groupYd : 100) + ' yd' : '—') + '</td>' +
+    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + fmt0(isNum(e.groupYd) ? e.groupYd : 100) + ' yd' +
+      '<br><span style="color:var(--ink-2)">' + inToMoa(e.groupIn, isNum(e.groupYd) ? e.groupYd : 100).toFixed(2) + ' MOA</span>' : '—') +
+      (e.target ? '<br><button type="button" class="rowbtn tgt-view" data-tgtview="' + esc(e.id) + '" aria-label="View target">' + groupPlotSVG(e.target, 44, { grid: false }) + '<span>view</span></button>' : '') + '</td>' +
     '<td class="num">' + (isNum(e.tempF) ? e.tempF + '&deg;F' : '—') + '</td>' +
     '<td>' + pressureBadge(e) + (e.notes ? '<br><span style="color:var(--ink-2)">' + esc(e.notes) + '</span>' : '') + (e.rifle ? '<br><span style="color:var(--muted);font-size:12px">' + esc(e.rifle) + '</span>' : '') +
       (e._unreadable ? '<br><span style="color:var(--critical);font-size:12px">Could not read: ' + esc(Object.keys(e._unreadable).map(k => k + ': ' + JSON.stringify(e._unreadable[k])).join('; ')) + '</span>' : '') + '</td>' +
@@ -2279,8 +2404,9 @@ function localISODate(d) {
   d = d || new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-function openLogEntry(prefill, ladderSteps) {
+function openLogEntry(prefill, ladderSteps, reuseTarget) {
   const e = prefill || {};
+  state.logLadder = ladderSteps || null;
   state.logEditing = e.id || null;
   const sel = $('#g-load');
   sel.innerHTML = '<option value="">— pick the load you fired —</option>' +
@@ -2301,6 +2427,7 @@ function openLogEntry(prefill, ladderSteps) {
   set('#g-rifle', isNew ? (e.rifle ?? (isNum(barrel) ? barrel + '" barrel' : '')) : e.rifle);
   set('#g-group', e.groupIn); set('#g-groupyd', isNum(e.groupYd) ? e.groupYd : 100); set('#g-notes', e.notes);
   document.querySelectorAll('.g-ps').forEach(cb => { cb.checked = !!(e.pressure && e.pressure.includes(cb.value)); });
+  tgtResetForEntry(e, reuseTarget);
   openModal('#log-back', owner ? '#g-charge' : '#g-load');
 }
 function saveLogEntry() {
@@ -2337,6 +2464,7 @@ function saveLogEntry() {
     groupIn: num('#g-group'), groupYd: num('#g-groupyd'),
     pressure: [...document.querySelectorAll('.g-ps:checked')].map(cb => cb.value),
     notes: $('#g-notes').value.trim() || undefined,
+    target: state.tgt && !state.tgt.removed ? state.tgt.target : undefined,
   };
   Object.keys(e).forEach(k => { if (e[k] === undefined) delete e[k]; });
   const i = state.log.findIndex(x => x.id === e.id);
@@ -2357,6 +2485,7 @@ function saveLogEntry() {
   saveLog();
   renderLog(); renderRecipe();
   closeModal('#log-back');
+  tgtAfterSave(e, state.logLadder);
 }
 function exportLog() {
   const blob = new Blob([JSON.stringify(state.log, null, 2)], { type: 'application/json' });
@@ -2384,6 +2513,657 @@ function importLog(file) {
     saveLog(); renderLog(); renderRecipe();
   };
   reader.readAsText(file);
+}
+
+/* ============================ target photo: mark the holes, measure the group ============================
+   Photograph the target, set the scale (two points a known distance apart, or the four corners
+   of a known rectangle, which also removes camera tilt), optionally mark the point of aim, then
+   tap each hole. Everything is measured center-to-center, in inches on the target. The shot
+   positions are stored on the log entry (so exports include them); the photo itself stays on
+   this device in IndexedDB, because localStorage is far too small for images. */
+
+// ---------- pure geometry and statistics (no DOM) ----------
+function solveLinear(A, b) {               // Gaussian elimination with partial pivoting
+  const n = b.length, M = A.map((r, i) => r.concat(b[i]));
+  for (let c = 0; c < n; c++) {
+    let piv = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+    if (Math.abs(M[piv][c]) < 1e-12) return null;
+    const tmp = M[c]; M[c] = M[piv]; M[piv] = tmp;
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  return M.map((r, i) => r[n] / r[i]);
+}
+// Projective map (homography) taking 4 source points to 4 destination points.
+function homography(src, dst) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const x = src[i][0], y = src[i][1], u = dst[i][0], v = dst[i][1];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  const h = solveLinear(A, b);
+  return h ? h.concat(1) : null;
+}
+function applyH(h, x, y) {
+  const w = h[6] * x + h[7] * y + h[8];
+  return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w];
+}
+// True when the 4 points form a convex quadrilateral in the given order.
+function isConvexQuad(p) {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = p[i], b = p[(i + 1) % 4], c = p[(i + 2) % 4];
+    const z = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(z) < 1e-9) return false;
+    if (sign === 0) sign = Math.sign(z); else if (Math.sign(z) !== sign) return false;
+  }
+  return true;
+}
+// Image pixels -> inches on the target (x to the right, y up), or null if the scale is incomplete.
+function targetMapper(cal) {
+  if (!cal || !Array.isArray(cal.pts)) return null;
+  if (cal.method === '4pt') {
+    if (cal.pts.length < 4 || !(cal.wIn > 0) || !(cal.hIn > 0) || !isConvexQuad(cal.pts)) return null;
+    const N = 1000;   // keep the linear system well conditioned
+    const h = homography(cal.pts.map(p => [p[0] / N, p[1] / N]), [[0, 0], [cal.wIn, 0], [cal.wIn, cal.hIn], [0, cal.hIn]]);
+    if (!h || h.some(v => !isFinite(v))) return null;
+    return (p) => { const q = applyH(h, p[0] / N, p[1] / N); return [q[0], -q[1]]; };
+  }
+  if (cal.pts.length < 2 || !(cal.distIn > 0)) return null;
+  const a = cal.pts[0], b = cal.pts[1], d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (d < 3) return null;   // points on top of each other
+  const s = cal.distIn / d;
+  return (p) => [p[0] * s, -p[1] * s];
+}
+// Pixels per inch near the middle of the calibration (a resolution check for the user).
+function pixelsPerInch(cal, map) {
+  if (!map) return null;
+  const c = cal.pts.reduce((a, p) => [a[0] + p[0] / cal.pts.length, a[1] + p[1] / cal.pts.length], [0, 0]);
+  const p0 = map(c), p1 = map([c[0] + 10, c[1]]);
+  const d = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+  return d > 0 ? 10 / d : null;
+}
+// Group statistics, inches. shots: [[x, y], ...] with x right and y up; aim: [x, y] or null.
+function groupStats(shots, aim) {
+  const n = shots.length;
+  if (!n) return null;
+  const cx = shots.reduce((a, p) => a + p[0], 0) / n, cy = shots.reduce((a, p) => a + p[1], 0) / n;
+  let es = 0, pair = null;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const d = Math.hypot(shots[i][0] - shots[j][0], shots[i][1] - shots[j][1]);
+    if (d > es) { es = d; pair = [i, j]; }
+  }
+  const mr = shots.reduce((a, p) => a + Math.hypot(p[0] - cx, p[1] - cy), 0) / n;
+  const xs = shots.map(p => p[0]), ys = shots.map(p => p[1]);
+  return { n, cx, cy, es, pair, mr, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys),
+           offX: aim ? cx - aim[0] : null, offY: aim ? cy - aim[1] : null };
+}
+const inToMoa = (inches, yd) => inches / (1.047 * yd / 100);   // 1 MOA = 1.047" at 100 yd
+const inToMil = (inches, yd) => inches / (0.036 * yd);         // 1 mil = 3.6" at 100 yd
+// Stats for a stored target (shots relative to the aim point when there is one).
+function storedTargetStats(t) { return t && t.shots && t.shots.length ? groupStats(t.shots, t.aim ? [0, 0] : null) : null; }
+function groupStatsHTML(st, yd) {
+  if (!st) return '';
+  const ang = (v) => isNum(yd) && yd > 0 ? ' <span class="cf-sum">(' + inToMoa(v, yd).toFixed(2) + ' MOA, ' + inToMil(v, yd).toFixed(2) + ' mil)</span>' : '';
+  const rows = [];
+  if (st.n >= 2) rows.push(['Group size (center to center)', '<b>' + st.es.toFixed(2) + '&Prime;</b>' + ang(st.es)]);
+  if (st.n >= 2) rows.push(['Mean radius', st.mr.toFixed(2) + '&Prime;' + ang(st.mr)]);
+  if (st.n >= 2) rows.push(['Width &times; height', st.w.toFixed(2) + '&Prime; &times; ' + st.h.toFixed(2) + '&Prime;']);
+  if (isNum(st.offX)) {
+    const v = Math.abs(st.offY) < 0.005 ? 'level' : Math.abs(st.offY).toFixed(2) + '&Prime; ' + (st.offY > 0 ? 'high' : 'low');
+    const hz = Math.abs(st.offX) < 0.005 ? 'centered' : Math.abs(st.offX).toFixed(2) + '&Prime; ' + (st.offX > 0 ? 'right' : 'left');
+    let txt = v + ', ' + hz + ' of your aim point';
+    if (isNum(yd) && yd > 0) txt += ' <span class="cf-sum">(' + inToMoa(Math.abs(st.offY), yd).toFixed(1) + ' MOA ' + (st.offY > 0 ? 'up' : 'down') + ', ' + inToMoa(Math.abs(st.offX), yd).toFixed(1) + ' MOA ' + (st.offX > 0 ? 'right' : 'left') + ')</span>';
+    rows.push(['Group center', txt]);
+  }
+  return '<div><span class="tgt-big">' + (st.n >= 2 ? st.es.toFixed(2) + '&Prime;' : '1 shot') + '</span> ' + st.n + ' shot' + (st.n === 1 ? '' : 's') +
+    (st.n >= 2 && isNum(yd) && yd > 0 ? ' &middot; ' + inToMoa(st.es, yd).toFixed(2) + ' MOA at ' + fmt0(yd) + ' yd' : '') + '</div>' +
+    '<table><tbody>' + rows.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table>';
+}
+// Small vector plot of a stored group: aim crosshair, shots, group center and the widest pair.
+function groupPlotSVG(t, size, opts) {
+  opts = opts || {};
+  const st = storedTargetStats(t);
+  if (!st) return '';
+  const pts = t.shots.concat(t.aim ? [[0, 0]] : []);
+  const ext = Math.max(0.5, ...pts.map(p => Math.max(Math.abs(p[0]), Math.abs(p[1])))) * 1.25;
+  const S = size / (2 * ext), c = size / 2;
+  const X = (x) => (c + x * S).toFixed(1), Y = (y) => (c - y * S).toFixed(1);
+  let g = '';
+  if (opts.grid !== false && ext <= 12) {
+    for (let k = -Math.floor(ext); k <= Math.floor(ext); k++) {
+      g += '<line x1="' + X(k) + '" y1="0" x2="' + X(k) + '" y2="' + size + '" stroke="var(--grid)" stroke-width="' + (k === 0 ? 1.2 : 0.6) + '"/>' +
+           '<line x1="0" y1="' + Y(k) + '" x2="' + size + '" y2="' + Y(k) + '" stroke="var(--grid)" stroke-width="' + (k === 0 ? 1.2 : 0.6) + '"/>';
+    }
+  }
+  if (t.aim) g += '<circle cx="' + X(0) + '" cy="' + Y(0) + '" r="' + (size / 14).toFixed(1) + '" fill="none" stroke="var(--good)" stroke-width="1.5"/>' +
+                  '<line x1="' + X(0) + '" y1="' + (c - size / 9).toFixed(1) + '" x2="' + X(0) + '" y2="' + (c + size / 9).toFixed(1) + '" stroke="var(--good)" stroke-width="1.2"/>' +
+                  '<line x1="' + (c - size / 9).toFixed(1) + '" y1="' + Y(0) + '" x2="' + (c + size / 9).toFixed(1) + '" y2="' + Y(0) + '" stroke="var(--good)" stroke-width="1.2"/>';
+  if (st.pair) {
+    const a = t.shots[st.pair[0]], b = t.shots[st.pair[1]];
+    g += '<line x1="' + X(a[0]) + '" y1="' + Y(a[1]) + '" x2="' + X(b[0]) + '" y2="' + Y(b[1]) + '" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="3 2"/>';
+  }
+  const r = Math.max(2, size / 28);
+  g += t.shots.map(p => '<circle cx="' + X(p[0]) + '" cy="' + Y(p[1]) + '" r="' + r.toFixed(1) + '" fill="var(--critical)" fill-opacity=".85" stroke="var(--surface)" stroke-width="1"/>').join('');
+  if (st.n >= 2) g += '<path d="M' + X(st.cx) + ' ' + (c - st.cy * S - r * 1.4).toFixed(1) + ' l' + (r * 1.4).toFixed(1) + ' ' + (r * 1.4).toFixed(1) + ' l' + (-r * 1.4).toFixed(1) + ' ' + (r * 1.4).toFixed(1) + ' l' + (-r * 1.4).toFixed(1) + ' ' + (-r * 1.4).toFixed(1) + 'z" fill="none" stroke="var(--ink)" stroke-width="1.2"/>';
+  return '<svg class="' + (opts.cls || '') + '" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="Group plot: ' + st.n + ' shots' +
+    (st.n >= 2 ? ', ' + st.es.toFixed(2) + ' inches center to center' : '') + (opts.grid !== false && ext <= 12 ? ', grid lines 1 inch apart' : '') + '">' +
+    '<rect width="' + size + '" height="' + size + '" rx="6" fill="var(--page)" stroke="var(--grid)"/>' + g + '</svg>';
+}
+function normalizeTarget(t) {
+  if (!t || typeof t !== 'object' || Array.isArray(t) || !Array.isArray(t.shots)) return undefined;
+  const shots = t.shots.filter(p => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]) && Math.abs(p[0]) < 1000 && Math.abs(p[1]) < 1000)
+    .slice(0, 200).map(p => [p[0], p[1]]);
+  if (!shots.length || shots.length !== t.shots.length) return undefined;
+  return { shots, aim: t.aim === true, method: t.method === '4pt' ? '4pt' : '2pt', photo: t.photo === true };
+}
+
+// ---------- photo storage (IndexedDB, with an in-memory fallback) ----------
+const TargetPhotos = {
+  _db: null, _mem: new Map(), _failed: false,
+  open() {
+    if (this._db) return Promise.resolve(this._db);
+    if (this._failed || !window.indexedDB) return Promise.reject(new Error('IndexedDB unavailable'));
+    return new Promise((res, rej) => {
+      let req;
+      try { req = indexedDB.open('reloader', 1); } catch (e) { this._failed = true; rej(e); return; }
+      req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('targets')) req.result.createObjectStore('targets'); };
+      req.onsuccess = () => { this._db = req.result; res(this._db); };
+      req.onerror = () => { this._failed = true; rej(req.error); };
+    });
+  },
+  async _tx(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('targets', mode), store = tx.objectStore('targets');
+      let out;
+      const r = fn(store);
+      if (r) r.onsuccess = () => { out = r.result; };
+      tx.oncomplete = () => res(out);
+      tx.onerror = () => rej(tx.error);
+      tx.onabort = () => rej(tx.error);
+    });
+  },
+  async put(id, rec) {
+    try { await this._tx('readwrite', s => s.put(rec, id)); return true; }
+    catch (e) { this._mem.set(id, rec); return false; }      // kept for this session only
+  },
+  async get(id) {
+    if (this._mem.has(id)) return this._mem.get(id);
+    try { return (await this._tx('readonly', s => s.get(id))) || null; } catch (e) { return null; }
+  },
+  async del(id) {
+    this._mem.delete(id);
+    try { await this._tx('readwrite', s => s.delete(id)); } catch (e) {}
+  },
+};
+
+// ---------- loading a photo ----------
+const TGT_MAX_PX = 1800;    // long edge kept; plenty to place marks, small enough to store
+async function decodeImage(blob) {
+  try { return await createImageBitmap(blob, { imageOrientation: 'from-image' }); }
+  catch (e) {
+    return await new Promise((res, rej) => {
+      const img = new Image(), u = URL.createObjectURL(blob);
+      img.onload = () => { URL.revokeObjectURL(u); res(img); };
+      img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('That file could not be read as an image.')); };
+      img.src = u;
+    });
+  }
+}
+async function prepareTargetPhoto(file) {
+  const bmp = await decodeImage(file);
+  const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
+  if (!(w0 > 0 && h0 > 0)) throw new Error('That file could not be read as an image.');
+  const k = Math.min(1, TGT_MAX_PX / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  if (bmp.close) bmp.close();
+  const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.85));
+  return { img: cv, blob, w, h };
+}
+async function photoFromBlob(blob) {
+  const bmp = await decodeImage(blob);
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width || bmp.naturalWidth; cv.height = bmp.height || bmp.naturalHeight;
+  cv.getContext('2d').drawImage(bmp, 0, 0);
+  if (bmp.close) bmp.close();
+  return { img: cv, blob, w: cv.width, h: cv.height };
+}
+
+// ---------- the marking view ----------
+const tm = { open: false };
+const TM_STEPS = ['scale', 'aim', 'shots'];
+function tmNeeded() { return tm.cal.method === '4pt' ? 4 : 2; }
+function tmMap() {
+  tm.cal.distIn = parseFloat($('#tgt-dist').value);
+  tm.cal.wIn = parseFloat($('#tgt-rw').value);
+  tm.cal.hIn = parseFloat($('#tgt-rh').value);
+  return targetMapper(tm.cal);
+}
+function tmSnapshot() { tm.undo.push(JSON.stringify({ pts: tm.cal.pts, aim: tm.aim, shots: tm.shots })); if (tm.undo.length > 200) tm.undo.shift(); }
+function tmUndo() {
+  const s = tm.undo.pop();
+  if (!s) return;
+  const o = JSON.parse(s);
+  tm.cal.pts = o.pts; tm.aim = o.aim; tm.shots = o.shots;
+  tmUpdate();
+}
+// photo: {img, blob, w, h}; marks (optional): {cal, aim, shots, step}; ghosts: shots from earlier groups (px)
+function tmOpen(photo, marks, ghosts, onDone) {
+  Object.assign(tm, {
+    open: true, img: photo.img, blob: photo.blob, w: photo.w, h: photo.h, onDone, returnFocus: document.activeElement,
+    cal: marks && marks.cal ? JSON.parse(JSON.stringify(marks.cal)) : { method: '2pt', pts: [], distIn: 1, wIn: 1, hIn: 1 },
+    aim: marks && marks.aim ? marks.aim.slice() : null,
+    shots: marks && marks.shots ? marks.shots.map(p => p.slice()) : [],
+    ghosts: ghosts || [], undo: [], pointers: new Map(), mode: null, drag: null, loupe: null, holdTimer: null, cursor: null,
+  });
+  $('#tgt-dist').value = tm.cal.distIn || 1; $('#tgt-rw').value = tm.cal.wIn || 1; $('#tgt-rh').value = tm.cal.hIn || 1;
+  document.querySelectorAll('input[name="tgt-method"]').forEach(r => { r.checked = r.value === tm.cal.method; });
+  $('#tgt-yd').value = $('#g-groupyd').value || 100;
+  tm.step = marks && marks.step ? marks.step : (tmMap() ? (tm.shots.length ? 'shots' : 'aim') : 'scale');
+  $('#log-back').inert = true;           // the log form behind stays out of reach
+  openModal('#tgt-back', '#tgt-canvas');
+  requestAnimationFrame(() => { tmFit(); tmUpdate(); });
+}
+function tmClose() {
+  tm.open = false;
+  if (tm.holdTimer) clearTimeout(tm.holdTimer);
+  $('#log-back').inert = false;
+  closeModal('#tgt-back');
+  // the log form is still open: put focus back on the control that opened the marker
+  const back = tm.returnFocus && document.contains(tm.returnFocus) && tm.returnFocus.offsetParent !== null ? tm.returnFocus : $('#tgt-take');
+  if (back && $('#log-back').classList.contains('open')) back.focus();
+}
+function tmStageSize() { const cv = $('#tgt-canvas'); return { cw: cv.clientWidth || 1, ch: cv.clientHeight || 1 }; }
+function tmFit() {
+  const { cw, ch } = tmStageSize();
+  const s = Math.min(cw / tm.w, ch / tm.h) * 0.98;
+  tm.view = { s, tx: (cw - tm.w * s) / 2, ty: (ch - tm.h * s) / 2, fit: s };
+  tmRender();
+}
+function tmZoom(f, sx, sy) {
+  const { cw, ch } = tmStageSize();
+  if (sx === undefined) { sx = cw / 2; sy = ch / 2; }
+  const v = tm.view, s2 = Math.max(v.fit * 0.5, Math.min(v.fit * 40, v.s * f));
+  const ix = (sx - v.tx) / v.s, iy = (sy - v.ty) / v.s;
+  v.s = s2; v.tx = sx - ix * s2; v.ty = sy - iy * s2;
+  tmRender();
+}
+const tmToScreen = (p) => [p[0] * tm.view.s + tm.view.tx, p[1] * tm.view.s + tm.view.ty];
+function tmToImg(e) {
+  const r = $('#tgt-canvas').getBoundingClientRect();
+  return [(e.clientX - r.left - tm.view.tx) / tm.view.s, (e.clientY - r.top - tm.view.ty) / tm.view.s];
+}
+function tmInside(p) { return p[0] >= 0 && p[1] >= 0 && p[0] <= tm.w && p[1] <= tm.h; }
+// marks the current step lets you touch: [{get, set}]
+function tmStepMarks() {
+  if (tm.step === 'scale') return tm.cal.pts.map((p, i) => ({ p, set: (q) => { tm.cal.pts[i] = q; } }));
+  if (tm.step === 'aim') return tm.aim ? [{ p: tm.aim, set: (q) => { tm.aim = q; } }] : [];
+  return tm.shots.map((p, i) => ({ p, set: (q) => { tm.shots[i] = q; } }));
+}
+function tmHit(e) {
+  const r = $('#tgt-canvas').getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  let best = null, bd = 18;
+  tmStepMarks().forEach(m => { const q = tmToScreen(m.p), d = Math.hypot(q[0] - sx, q[1] - sy); if (d < bd) { bd = d; best = m; } });
+  return best;
+}
+function tmPlace(p) {
+  if (!tmInside(p)) return;
+  p = [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10];
+  if (tm.step === 'scale') {
+    if (tm.cal.pts.length >= tmNeeded()) { tmSay('All ' + tmNeeded() + ' scale points are placed. Drag one to adjust it, or Undo.'); return; }
+    tmSnapshot(); tm.cal.pts.push(p);
+  } else if (tm.step === 'aim') { tmSnapshot(); tm.aim = p; }
+  else { tmSnapshot(); tm.shots.push(p); }
+  tmUpdate();
+}
+function tmSay(t) { $('#tgt-instr').textContent = t; }
+function tmInstruction() {
+  if (tm.step === 'scale') {
+    const n = tm.cal.pts.length;
+    if (tm.cal.method === '4pt') {
+      const names = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+      return n < 4 ? 'Step 1: tap the ' + names[n] + ' corner of a rectangle whose size you know (' + n + ' of 4), then enter its width and height.'
+                   : 'Scale set from the four corners. Check the size below, then press Next.';
+    }
+    return n < 2 ? 'Step 1: tap two points a known distance apart, such as two grid lines 1 inch apart (' + n + ' of 2), then enter that distance.'
+                 : 'Scale set. Check the distance below, then press Next.';
+  }
+  if (tm.step === 'aim') return tm.aim ? 'Aim point marked. Drag it to adjust, or press Next.' : 'Step 2: tap where you aimed (the center of the bull). Optional: press Skip if you only want the group size.';
+  return 'Step 3: tap the center of each bullet hole (' + tm.shots.length + ' marked). Press and hold for a magnifier; drag a mark to fine-tune it.';
+}
+function tmUpdate() {
+  // step bar
+  document.querySelectorAll('.tgt-steps li').forEach(li => {
+    const i = TM_STEPS.indexOf(li.dataset.step), cur = TM_STEPS.indexOf(tm.step);
+    li.classList.toggle('current', i === cur);
+    li.classList.toggle('done', i < cur);
+    li.querySelector('button').setAttribute('aria-current', i === cur ? 'step' : 'false');
+  });
+  $('#tgt-scale-opts').hidden = tm.step !== 'scale';
+  const four = tm.cal.method === '4pt';
+  $('#tgt-dist-wrap').hidden = four; $('#tgt-rect-wrap').hidden = !four; $('#tgt-rect-wrap2').hidden = !four;
+  const map = tmMap();
+  $('#tgt-back-step').disabled = tm.step === 'scale';
+  $('#tgt-next').hidden = tm.step === 'shots';
+  $('#tgt-next').disabled = tm.step === 'scale' && !map;
+  $('#tgt-next').textContent = tm.step === 'aim' && !tm.aim ? 'Skip' : 'Next';
+  $('#tgt-done').hidden = tm.step !== 'shots';
+  $('#tgt-done').disabled = !map || !tm.shots.length;
+  tmSay(tmInstruction());
+  // results
+  const out = $('#tgt-results');
+  if (!map) { out.innerHTML = tm.step === 'scale' ? '' : '<span class="cf-sum">Set the scale first.</span>'; }
+  else {
+    const ppi = pixelsPerInch(tm.cal, map);
+    const yd = parseFloat($('#tgt-yd').value);
+    const st = tm.shots.length ? groupStats(tm.shots.map(map), tm.aim ? map(tm.aim) : null) : null;
+    let warn = '';
+    if (ppi && ppi < 20) warn = '<p class="status-line status-nearmax"><span class="icon">&#9888;</span><span>Only about ' + Math.round(ppi) + ' pixels per inch: take the photo closer, or fill the frame with the target, for precise marks.</span></p>';
+    if (!four && tm.step !== 'scale') warn += '<p class="tip" style="color:var(--ink-2);font-size:12.5px;margin:4px 0 0">Two-point scale assumes the photo was taken straight on. For an angled photo use four corners.</p>';
+    out.innerHTML = (st ? groupStatsHTML(st, yd) : (tm.step === 'scale' ? '<span class="cf-sum">' + (ppi ? 'About ' + Math.round(ppi) + ' pixels per inch.' : '') + '</span>' : '<span class="cf-sum">No shots marked yet.</span>')) + warn;
+  }
+  tmRender();
+}
+function tmRender() {
+  const cv = $('#tgt-canvas');
+  if (!cv || !tm.open || !tm.view) return;
+  const dpr = window.devicePixelRatio || 1, { cw, ch } = tmStageSize();
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+  const ctx = cv.getContext('2d'), v = tm.view;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#222'; ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingEnabled = v.s < 2;
+  ctx.drawImage(tm.img, v.tx, v.ty, tm.w * v.s, tm.h * v.s);
+  const S = tmToScreen;
+  const ring = (p, r, stroke, fill, w) => { const q = S(p); ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, Math.PI * 2); if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.lineWidth = w || 2; ctx.strokeStyle = stroke; ctx.stroke(); };
+  const label = (p, txt, color, dx, dy) => { const q = S(p); ctx.font = '600 12px system-ui, sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.strokeText(txt, q[0] + dx, q[1] + dy); ctx.fillStyle = color; ctx.fillText(txt, q[0] + dx, q[1] + dy); };
+  const cross = (p, r, color) => { const q = S(p); ctx.beginPath(); ctx.moveTo(q[0] - r, q[1]); ctx.lineTo(q[0] + r, q[1]); ctx.moveTo(q[0], q[1] - r); ctx.lineTo(q[0], q[1] + r); ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke(); };
+  // earlier groups on this photo (dimmed, not editable)
+  tm.ghosts.forEach(p => ring(p, 5, 'rgba(255,255,255,.55)', 'rgba(0,0,0,.25)', 1.5));
+  // scale marks
+  const cal = tm.cal.pts;
+  if (cal.length) {
+    ctx.beginPath();
+    cal.forEach((p, i) => { const q = S(p); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+    if (tm.cal.method === '4pt' && cal.length === 4) ctx.closePath();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#4da3ff'; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+    cal.forEach((p, i) => { const q = S(p); ctx.fillStyle = '#4da3ff'; ctx.fillRect(q[0] - 5, q[1] - 5, 10, 10); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(q[0] - 5, q[1] - 5, 10, 10); label(p, String(i + 1), '#bfe0ff', 8, -8); });
+  }
+  // aim point
+  if (tm.aim) { ring(tm.aim, 11, '#2ee02e', null, 2); cross(tm.aim, 16, '#2ee02e'); }
+  // shots, group center, widest pair
+  const map = targetMapper(tm.cal);
+  if (map && tm.shots.length >= 2) {
+    const st = groupStats(tm.shots.map(map), null);
+    const a = S(tm.shots[st.pair[0]]), b = S(tm.shots[st.pair[1]]);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffd400'; ctx.stroke(); ctx.setLineDash([]);
+    const cxp = [tm.shots.reduce((s, p) => s + p[0], 0) / tm.shots.length, tm.shots.reduce((s, p) => s + p[1], 0) / tm.shots.length];
+    const q = S(cxp); ctx.beginPath(); ctx.moveTo(q[0], q[1] - 8); ctx.lineTo(q[0] + 8, q[1]); ctx.lineTo(q[0], q[1] + 8); ctx.lineTo(q[0] - 8, q[1]); ctx.closePath(); ctx.lineWidth = 2; ctx.strokeStyle = '#ffd400'; ctx.stroke();
+  }
+  tm.shots.forEach((p, i) => { ring(p, 8, '#ff3b3b', 'rgba(255,59,59,.25)', 2.5); cross(p, 3, '#ff3b3b'); label(p, String(i + 1), '#ffd0d0', 10, -10); });
+  // keyboard crosshair
+  if (tm.cursor && document.activeElement === cv) { cross(tm.cursor, 14, '#fff'); ring(tm.cursor, 6, '#000', null, 1); }
+  // magnifier
+  if (tm.loupe) {
+    const R = 62, Z = Math.min(8, Math.max(3, 4 * v.fit / v.s)) * v.s, p = tm.loupe.p;
+    let lx = tm.loupe.sx, ly = tm.loupe.sy - 110;
+    if (ly - R < 4) ly = tm.loupe.sy + 110;
+    lx = Math.max(R + 4, Math.min(cw - R - 4, lx));
+    ctx.save(); ctx.beginPath(); ctx.arc(lx, ly, R, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = '#222'; ctx.fillRect(lx - R, ly - R, 2 * R, 2 * R);
+    ctx.drawImage(tm.img, lx - p[0] * Z, ly - p[1] * Z, tm.w * Z, tm.h * Z);
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(lx, ly, R, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx - 14, ly); ctx.lineTo(lx + 14, ly); ctx.moveTo(lx, ly - 14); ctx.lineTo(lx, ly + 14); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ff3b3b'; ctx.stroke();
+  }
+}
+function tmGoto(step) {
+  if (step !== 'scale' && !tmMap()) { tmSay('Set the scale first: place the points and enter the distance.'); return; }
+  tm.step = step;
+  tmUpdate();
+}
+function tmFinish() {
+  const map = tmMap();
+  if (!map || !tm.shots.length) return;
+  const aimIn = tm.aim ? map(tm.aim) : null;
+  const shotsIn = tm.shots.map(map);
+  const st = groupStats(shotsIn, null);
+  const ref = aimIn || [st.cx, st.cy];   // stored relative to the aim point, else to the group center
+  const target = { shots: shotsIn.map(p => [Math.round((p[0] - ref[0]) * 1000) / 1000, Math.round((p[1] - ref[1]) * 1000) / 1000]), aim: !!aimIn, method: tm.cal.method, photo: true };
+  const marks = { cal: JSON.parse(JSON.stringify(tm.cal)), aim: tm.aim, shots: tm.shots };
+  const yd = parseFloat($('#tgt-yd').value);
+  const done = tm.onDone, photo = { img: tm.img, blob: tm.blob, w: tm.w, h: tm.h }, ghosts = tm.ghosts;
+  tmClose();
+  if (done) done({ target, photo, marks, ghosts, yd });
+}
+function tmWire() {
+  const cv = $('#tgt-canvas');
+  const sp = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointerdown', (e) => {
+    if (!tm.open) return;
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is a convenience */ }
+    tm.pointers.set(e.pointerId, sp(e));
+    if (tm.pointers.size === 2) {
+      // pinch: cancel any tap/hold/drag in progress
+      if (tm.holdTimer) clearTimeout(tm.holdTimer);
+      const [a, b] = [...tm.pointers.values()];
+      tm.mode = 'pinch'; tm.loupe = null; tm.drag = null;
+      tm.pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], s: tm.view.s, tx: tm.view.tx, ty: tm.view.ty };
+      tmRender(); return;
+    }
+    // A press near a mark becomes a drag of that mark only if the pointer moves or is held;
+    // a plain tap always adds a new mark (holes in a tight group sit close together, and two
+    // bullets can share one hole).
+    tm.pressHit = tmHit(e);
+    tm.mode = 'press'; tm.start = sp(e); tm.startView = { tx: tm.view.tx, ty: tm.view.ty };
+    if (tm.holdTimer) clearTimeout(tm.holdTimer);
+    tm.holdTimer = setTimeout(() => {
+      if (tm.mode !== 'press') return;
+      const q = tm.pointers.get(e.pointerId) || tm.start;
+      if (tm.pressHit) { tmSnapshot(); tm.mode = 'drag'; tm.drag = tm.pressHit; tm.loupe = { p: tm.drag.p, sx: q[0], sy: q[1] }; }
+      else { tm.mode = 'aiming'; tm.loupe = { p: [(q[0] - tm.view.tx) / tm.view.s, (q[1] - tm.view.ty) / tm.view.s], sx: q[0], sy: q[1] }; }
+      tmRender();
+    }, 300);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!tm.open || !tm.pointers.has(e.pointerId)) return;
+    const q = sp(e);
+    tm.pointers.set(e.pointerId, q);
+    if (tm.mode === 'pinch' && tm.pointers.size === 2) {
+      const [a, b] = [...tm.pointers.values()], P = tm.pinch;
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const s2 = Math.max(tm.view.fit * 0.5, Math.min(tm.view.fit * 40, P.s * d / Math.max(1, P.d)));
+      const ix = (P.mid[0] - P.tx) / P.s, iy = (P.mid[1] - P.ty) / P.s;
+      tm.view.s = s2; tm.view.tx = mid[0] - ix * s2; tm.view.ty = mid[1] - iy * s2;
+      tmRender(); return;
+    }
+    if (tm.mode === 'drag') {
+      const p = [(q[0] - tm.view.tx) / tm.view.s, (q[1] - tm.view.ty) / tm.view.s];
+      if (tmInside(p)) { tm.drag.set(p); tm.drag.p = p; }
+      tm.loupe = { p: tm.drag.p, sx: q[0], sy: q[1] };
+      tmUpdate(); return;
+    }
+    if (tm.mode === 'aiming') {
+      tm.loupe = { p: [(q[0] - tm.view.tx) / tm.view.s, (q[1] - tm.view.ty) / tm.view.s], sx: q[0], sy: q[1] };
+      tmRender(); return;
+    }
+    if (tm.mode === 'press' && Math.hypot(q[0] - tm.start[0], q[1] - tm.start[1]) > 6) {
+      if (tm.holdTimer) clearTimeout(tm.holdTimer);
+      if (tm.pressHit) {   // moving a mark: it follows the pointer, with the magnifier
+        tmSnapshot(); tm.mode = 'drag'; tm.drag = tm.pressHit;
+        const p = [(q[0] - tm.view.tx) / tm.view.s, (q[1] - tm.view.ty) / tm.view.s];
+        if (tmInside(p)) { tm.drag.set(p); tm.drag.p = p; }
+        tm.loupe = { p: tm.drag.p, sx: q[0], sy: q[1] };
+        tmUpdate(); return;
+      }
+      tm.mode = 'pan';
+    }
+    if (tm.mode === 'pan') { tm.view.tx = tm.startView.tx + (q[0] - tm.start[0]); tm.view.ty = tm.startView.ty + (q[1] - tm.start[1]); tmRender(); }
+  });
+  const end = (e) => {
+    if (!tm.open || !tm.pointers.has(e.pointerId)) return;
+    const q = tm.pointers.get(e.pointerId);
+    tm.pointers.delete(e.pointerId);
+    if (tm.holdTimer) clearTimeout(tm.holdTimer);
+    const cancelled = e.type === 'pointercancel';
+    if (tm.mode === 'pinch') { if (tm.pointers.size === 0) tm.mode = null; return; }
+    if (tm.mode === 'press' && !cancelled) tmPlace([(q[0] - tm.view.tx) / tm.view.s, (q[1] - tm.view.ty) / tm.view.s]);
+    else if (tm.mode === 'aiming' && !cancelled) tmPlace(tm.loupe.p);
+    else if (tm.mode === 'drag' && cancelled) tmUndo();
+    tm.mode = null; tm.drag = null; tm.loupe = null;
+    tmUpdate();
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('wheel', (e) => { if (!tm.open) return; e.preventDefault(); const q = sp(e); tmZoom(Math.exp(-e.deltaY * 0.0015), q[0], q[1]); }, { passive: false });
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+  // keyboard: a crosshair you move with the arrows; Enter places a mark there
+  cv.addEventListener('focus', () => { if (tm.open && !tm.cursor) tm.cursor = [tm.w / 2, tm.h / 2]; tmRender(); });
+  cv.addEventListener('blur', () => tmRender());
+  cv.addEventListener('keydown', (e) => {
+    if (!tm.open) return;
+    const stepPx = (e.shiftKey ? 15 : 2) / tm.view.s;
+    const mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (mv) {
+      e.preventDefault();
+      tm.cursor = [Math.max(0, Math.min(tm.w, tm.cursor[0] + mv[0] * stepPx)), Math.max(0, Math.min(tm.h, tm.cursor[1] + mv[1] * stepPx))];
+      // keep the crosshair on screen
+      const q = tmToScreen(tm.cursor), { cw, ch } = tmStageSize();
+      if (q[0] < 20) tm.view.tx += 20 - q[0]; if (q[0] > cw - 20) tm.view.tx -= q[0] - (cw - 20);
+      if (q[1] < 20) tm.view.ty += 20 - q[1]; if (q[1] > ch - 20) tm.view.ty -= q[1] - (ch - 20);
+      tmRender(); return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tmPlace(tm.cursor); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); tmUndo(); return; }
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); const q = tmToScreen(tm.cursor); tmZoom(1.25, q[0], q[1]); return; }
+    if (e.key === '-') { e.preventDefault(); const q = tmToScreen(tm.cursor); tmZoom(0.8, q[0], q[1]); }
+  });
+  $('#tgt-undo').addEventListener('click', tmUndo);
+  $('#tgt-zoom-in').addEventListener('click', () => tmZoom(1.4));
+  $('#tgt-zoom-out').addEventListener('click', () => tmZoom(1 / 1.4));
+  $('#tgt-fit').addEventListener('click', tmFit);
+  $('#tgt-next').addEventListener('click', () => tmGoto(TM_STEPS[Math.min(2, TM_STEPS.indexOf(tm.step) + 1)]));
+  $('#tgt-back-step').addEventListener('click', () => tmGoto(TM_STEPS[Math.max(0, TM_STEPS.indexOf(tm.step) - 1)]));
+  document.querySelectorAll('.tgt-steps [data-goto]').forEach(b => b.addEventListener('click', () => tmGoto(b.dataset.goto)));
+  $('#tgt-done').addEventListener('click', tmFinish);
+  $('#tgt-cancel').addEventListener('click', tmClose);
+  document.querySelectorAll('input[name="tgt-method"]').forEach(r => r.addEventListener('change', () => {
+    if (!r.checked || r.value === tm.cal.method) return;
+    tmSnapshot(); tm.cal.method = r.value; tm.cal.pts = [];
+    tmUpdate();
+  }));
+  ['#tgt-dist', '#tgt-rw', '#tgt-rh', '#tgt-yd'].forEach(sel => $(sel).addEventListener('input', () => { if (tm.open) tmUpdate(); }));
+  if (window.ResizeObserver) new ResizeObserver(() => { if (tm.open && tm.view) tmRender(); }).observe($('#tgt-stage'));
+}
+
+// ---------- log form integration ----------
+// state.tgt holds the target for the log form being edited:
+//   { target, photo: {img, blob, w, h} | null, marks, changed, removed, ghosts }
+function tgtSummaryRender() {
+  const box = $('#tgt-summary'), d = state.tgt;
+  const has = d && d.target && !d.removed;
+  $('#tgt-edit').hidden = !(has && d.target.photo);
+  $('#tgt-remove').hidden = !has;
+  $('#tgt-take').textContent = has ? '\u{1F4F7} Retake photo' : '\u{1F4F7} Take photo';
+  if (!has) { box.innerHTML = ''; return; }
+  const yd = parseFloat($('#g-groupyd').value);
+  box.innerHTML = '<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">' + groupPlotSVG(d.target, 120, { cls: 'tgt-mini' }) +
+    '<div class="tgt-results" style="flex:1;min-width:200px">' + groupStatsHTML(storedTargetStats(d.target), yd) + '</div></div>';
+}
+async function tgtFromFile(file) {
+  if (!file) return;
+  let photo;
+  try { photo = await prepareTargetPhoto(file); }
+  catch (err) { alert(err.message || 'That photo could not be opened.'); return; }
+  // a fresh photo starts fresh, unless it is the same sheet reused for the next group
+  tmOpen(photo, null, [], tgtApply);
+}
+function tgtApply(res) {
+  state.tgt = { target: res.target, photo: res.photo, marks: res.marks, ghosts: res.ghosts || [], changed: true, removed: false };
+  if (res.target.shots.length >= 2) $('#g-group').value = storedTargetStats(res.target).es.toFixed(2);
+  if (isNum(res.yd) && res.yd > 0) $('#g-groupyd').value = res.yd;
+  tgtSummaryRender();
+}
+async function tgtEdit() {
+  const d = state.tgt;
+  if (!d || !d.target) return;
+  let photo = d.photo, marks = d.marks;
+  if (!photo && state.logEditing) {
+    const rec = await TargetPhotos.get(state.logEditing);
+    if (rec && rec.blob) { try { photo = await photoFromBlob(rec.blob); marks = rec.marks; d.ghosts = rec.ghosts || []; } catch (e) { photo = null; } }
+  }
+  if (!photo) { alert('The photo for this entry is not stored on this device, so its marks cannot be edited here.'); return; }
+  d.photo = photo; d.marks = marks;
+  tmOpen(photo, Object.assign({}, marks, { step: 'shots' }), d.ghosts, tgtApply);
+}
+// Called by openLogEntry: set up the target part of the form for this entry.
+function tgtResetForEntry(e, reuse) {
+  state.tgt = e && e.target ? { target: e.target, photo: null, marks: null, ghosts: [], changed: false, removed: false } : null;
+  tgtSummaryRender();
+  if (reuse) {
+    // next group on the same sheet: same photo and scale, earlier groups shown dimmed
+    setTimeout(() => tmOpen(reuse.photo, { cal: reuse.cal, step: 'aim', aim: reuse.aim }, reuse.ghosts, tgtApply), 0);
+  }
+}
+// Called by saveLogEntry after the entry is stored.
+async function tgtAfterSave(entry, ladder) {
+  const d = state.tgt;
+  if (d && d.removed) { await TargetPhotos.del(entry.id); return; }
+  if (!d || !d.changed || !d.photo) return;
+  const persisted = await TargetPhotos.put(entry.id, { blob: d.photo.blob, w: d.photo.w, h: d.photo.h, marks: d.marks, ghosts: d.ghosts, savedAt: Date.now() });
+  // offer the next group on this sheet (a ladder test usually shoots several groups on one target)
+  const next = (ladder || []).find(ch => ch > entry.chargeGr + 1e-9);
+  const reuse = { photo: d.photo, cal: d.marks.cal, aim: null, ghosts: (d.ghosts || []).concat(d.marks.shots || []) };
+  showToast((persisted ? 'Saved with the target photo.' : 'Saved. The photo could not be stored on this device and will be gone after a reload.') + ' Mark another group on this sheet?',
+    [{ label: next ? 'Next group (' + fmt1(next) + ' gr)' : 'Another group', run: () => openLogEntry({ loadId: entry.loadId, chargeGr: next, groupYd: entry.groupYd }, ladder, reuse) }]);
+}
+function showToast(text, actions) {
+  const t = $('#toast');
+  t.innerHTML = '<span>' + esc(text) + '</span>' + (actions || []).map((a, i) => '<button type="button" class="btn primary" data-act="' + i + '">' + esc(a.label) + '</button>').join('') +
+    '<button type="button" class="btn" data-act="x" aria-label="Dismiss">&times;</button>';
+  t.hidden = false;
+  t.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    t.hidden = true;
+    const a = actions && actions[+b.dataset.act];
+    if (a) a.run();
+  }));
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => { t.hidden = true; }, 20000);
+}
+async function openTargetViewer(id) {
+  const e = state.log.find(x => x.id === id);
+  if (!e || !e.target) return;
+  const body = $('#tgtview-body');
+  const st = storedTargetStats(e.target), yd = e.groupYd || 100;
+  body.innerHTML = '<p class="recipe-sub" style="margin:0 0 8px">' + esc((e.date ? e.date + ' · ' : '') + e.cartridge + ' · ' + (e.bulletDesc || '') + ' · ' + e.powder + ' · ' + fmt1(e.chargeGr) + ' gr') + '</p>' +
+    '<div class="tgtview-photo" id="tgtview-photo"></div>' +
+    '<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-top:10px">' + groupPlotSVG(e.target, 200) + '<div class="tgt-results">' + groupStatsHTML(st, yd) + '</div></div>';
+  openModal('#tgtview-back', '#tgtview-close');
+  const rec = e.target.photo ? await TargetPhotos.get(e.id) : null;
+  if (rec && rec.blob && rec.marks) {
+    const url = URL.createObjectURL(rec.blob);
+    viewerUrls.push(url);
+    const m = rec.marks, r = Math.max(rec.w, rec.h) / 140;
+    const shots = (m.shots || []).map((p, i) => '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (r * 1.6).toFixed(1) + '" fill="rgba(255,59,59,.25)" stroke="#ff3b3b" stroke-width="' + (r * 0.45).toFixed(1) + '"/><text x="' + (p[0] + r * 2) + '" y="' + (p[1] - r * 2) + '" font-size="' + (r * 2.6).toFixed(1) + '" fill="#ffd0d0" stroke="#000" stroke-width="' + (r * 0.4).toFixed(1) + '" paint-order="stroke" font-weight="700">' + (i + 1) + '</text>').join('');
+    const aim = m.aim ? '<circle cx="' + m.aim[0] + '" cy="' + m.aim[1] + '" r="' + (r * 2.2).toFixed(1) + '" fill="none" stroke="#2ee02e" stroke-width="' + (r * 0.45).toFixed(1) + '"/>' : '';
+    $('#tgtview-photo').innerHTML = '<svg viewBox="0 0 ' + rec.w + ' ' + rec.h + '" role="img" aria-label="Target photo with the ' + (m.shots || []).length + ' marked shots"><image href="' + url + '" width="' + rec.w + '" height="' + rec.h + '"/>' + aim + shots + '</svg>';
+  } else if (e.target.photo) {
+    $('#tgtview-photo').innerHTML = '<p class="tip" style="color:var(--ink-2);font-size:13px">The photo is not stored on this device (it may have been logged in another browser or imported). The plot below shows the marked shots.</p>';
+  }
+}
+const viewerUrls = [];
+function closeTargetViewer() {
+  closeModal('#tgtview-back');
+  while (viewerUrls.length) URL.revokeObjectURL(viewerUrls.pop());
 }
 
 /* ============================ ballistics ============================ */
@@ -2675,7 +3455,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const ed = e.target.closest('[data-logedit]'), del = e.target.closest('[data-logdel]');
     if (ed) openLogEntry(state.log.find(x => x.id === ed.dataset.logedit));
     if (del) deleteLogEntry(del.dataset.logdel);
+    const tv = e.target.closest('[data-tgtview]');
+    if (tv) openTargetViewer(tv.dataset.tgtview);
   });
+  // target photos in the log form
+  tmWire();
+  $('#tgt-take').addEventListener('click', () => $('#tgt-file-cam').click());
+  $('#tgt-choose').addEventListener('click', () => $('#tgt-file').click());
+  ['#tgt-file-cam', '#tgt-file'].forEach(sel => $(sel).addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; tgtFromFile(f); }));
+  $('#tgt-edit').addEventListener('click', tgtEdit);
+  $('#tgt-remove').addEventListener('click', () => { if (state.tgt) { state.tgt.removed = true; tgtSummaryRender(); } });
+  $('#g-groupyd').addEventListener('input', tgtSummaryRender);
+  $('#tgtview-close').addEventListener('click', closeTargetViewer);
 
   // ballistics
   $('#btn-bal-calc').addEventListener('click', renderBallistics);
@@ -2711,7 +3502,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Escape closes the log and edit dialogs (never the safety acknowledgement)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if ($('#log-back').classList.contains('open')) closeModal('#log-back');
+    if ($('#tgt-back').classList.contains('open')) tmClose();
+    else if ($('#tgtview-back').classList.contains('open')) closeTargetViewer();
+    else if ($('#log-back').classList.contains('open')) closeModal('#log-back');
     else if ($('#edit-back').classList.contains('open')) closeModal('#edit-back');
   });
 
