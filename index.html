@@ -187,6 +187,12 @@
     padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 13.5px; margin-top: 14px;
   }
   .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .casefill { margin-top: 18px; border-top: 1px solid var(--grid); padding-top: 10px; }
+  .casefill summary { cursor: pointer; font-weight: 700; font-size: 15px; }
+  .casefill .cf-sum { font-weight: 600; color: var(--ink-2); }
+  .casefill .setup-grid > div { display: flex; flex-direction: column; justify-content: flex-end; }
+  .casefill .cf-out { margin-top: 12px; font-size: 14px; }
+  .casefill .cf-big { font-size: 26px; font-weight: 650; margin-right: 4px; }
   .btn {
     appearance: none; font: inherit; font-weight: 600; font-size: 13.5px;
     padding: 7px 14px; border-radius: 8px; cursor: pointer;
@@ -1194,6 +1200,141 @@ function chartSVG(l, calc, points) {
     '</svg>';
 }
 
+/* ============================ case fill (load density) ============================
+   The share of the case's usable volume that a charge of powder occupies. The
+   library has no case capacities or powder bulk densities (publishers don't list
+   them, and both vary with brass, firing and powder lot), so the user measures them
+   once; they are remembered per cartridge+case and per powder. The figure is a
+   reference only and never changes the published charge limits. */
+const LS_FILL = 'rc.casefill.v1';
+const WATER_G_PER_CC = 0.9982;                                         // water at ~20 °C
+const GR_PER_G = 15.4323584;
+const GR_H2O_PER_CUIN = 16.387064 * WATER_G_PER_CC * GR_PER_G;         // ≈ 252.4 gr of water per in³
+// Standard bullet diameters (in) for the built-in cartridges: a starting value only.
+const BULLET_DIA = {
+  '.22-250 Remington': 0.224, '.223 Remington': 0.224, '.243 Winchester': 0.243, '.25-06 Remington': 0.257,
+  '.260 Remington': 0.264, '6.5 Creedmoor': 0.264, '6.5 PRC': 0.264, '.270 Winchester': 0.277,
+  '.280 Remington': 0.284, '7mm-08 Remington': 0.284, '7mm PRC': 0.284, '7mm Remington Magnum': 0.284,
+  '.30-06 Springfield': 0.308, '.30-30 Winchester': 0.308, '.300 Blackout': 0.308, '.300 WSM': 0.308,
+  '.300 Winchester Magnum': 0.308, '.308 Winchester': 0.308, '.35 Remington': 0.358, '.350 Legend': 0.355,
+  '.38 Special': 0.357, '.44 Remington Magnum': 0.429, '.45 ACP': 0.451, '.45-70 Government': 0.458,
+  '.450 Bushmaster': 0.452, '9mm Luger': 0.355,
+};
+const FILL_LIMITS = { cap: [3, 200], bd: [0.3, 1.3], blen: [0.2, 2.5], clen: [0.3, 3.5], dia: [0.17, 0.51], charge: [0.1, 300] };
+function loadFill() {
+  const f = { cap: {}, bd: {}, blen: {}, clen: {}, dia: {} };
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_FILL) || 'null');
+    if (raw && typeof raw === 'object') Object.keys(f).forEach(k => {
+      if (raw[k] && typeof raw[k] === 'object') Object.keys(raw[k]).forEach(n => { if (isNum(raw[k][n])) f[k][n] = raw[k][n]; });
+    });
+  } catch (e) {}
+  return f;
+}
+function saveFill() { try { localStorage.setItem(LS_FILL, JSON.stringify(state.fill)); } catch (e) {} }
+state.fill = loadFill();
+state.fillCharge = {};     // charge typed into the case-fill box, per load (this session)
+state.fillOpen = true;
+function fillKeys(l) {
+  const cart = canon(l.cartridge), cap = cart + '|' + canon(l.caseBrand || '');
+  return { cap, powder: canon(l.powder), bullet: cart + '|' + l.bulletWeightGr + '|' + canon(l.bulletDesc), cart };
+}
+function fillInputs(l) {
+  const k = fillKeys(l), f = state.fill;
+  return { capH2O: f.cap[k.cap], bd: f.bd[k.powder], bulletLenIn: f.blen[k.bullet], caseLenIn: f.clen[k.cap],
+           diaIn: isNum(f.dia[k.cart]) ? f.dia[k.cart] : BULLET_DIA[l.cartridge] };
+}
+// Pure calculation: % of the usable case volume the charge occupies. Usable volume is
+// the water capacity to the mouth minus the part of the bullet seated inside the case
+// (bullet length - (COAL - case length), as a cylinder: slightly generous for a boattail).
+function caseFill(charge, p, coalIn) {
+  if (!isNum(charge) || charge <= 0 || !isNum(p.capH2O) || p.capH2O <= 0 || !isNum(p.bd) || p.bd <= 0) return null;
+  let intrusion = 0, depth = null;
+  if (isNum(p.bulletLenIn) && isNum(p.caseLenIn) && isNum(coalIn) && isNum(p.diaIn)) {
+    depth = Math.max(0, p.bulletLenIn - (coalIn - p.caseLenIn));
+    intrusion = Math.PI / 4 * p.diaIn * p.diaIn * depth * GR_H2O_PER_CUIN;
+  }
+  const usable = p.capH2O - intrusion;
+  if (!(usable > 0)) return null;
+  const powderH2O = charge * WATER_G_PER_CC / p.bd;    // the powder's volume, in grains of water
+  return { pct: powderH2O / usable * 100, usable, intrusion, depth, powderH2O };
+}
+function caseFillHTML(l, defaultCharge) {
+  const p = fillInputs(l);
+  const charge = isNum(state.fillCharge[l.id]) ? state.fillCharge[l.id] : defaultCharge;
+  const val = (x) => isNum(x) ? x : '';
+  const field = (id, label, v, step, ph) => '<div><label for="' + id + '">' + label + '</label><input type="number" id="' + id + '" step="' + step + '" min="0"' + (ph ? ' placeholder="' + ph + '"' : '') + ' value="' + val(v) + '"></div>';
+  const caseName = l.caseBrand ? esc(l.caseBrand) + ' ' : '';
+  return '<details class="casefill" id="cf-box"' + (state.fillOpen ? ' open' : '') + '><summary>Case fill <span class="cf-sum" id="cf-summary"></span></summary>' +
+    '<div class="setup-grid">' +
+    field('cf-charge', 'Charge (gr)', charge, '0.1') +
+    field('cf-cap', 'Water capacity of a fired ' + caseName + 'case, to the mouth (gr H&#8322;O)', p.capH2O, '0.1', 'e.g. 56.0') +
+    field('cf-bd', 'Bulk density of ' + esc(l.powder) + ' (g/cc)', p.bd, '0.001', 'e.g. 0.920') +
+    field('cf-pf', '&hellip;or grains of ' + esc(l.powder) + ' that fill that case to the mouth', null, '0.1') +
+    field('cf-blen', 'Bullet length (in) &mdash; optional', p.bulletLenIn, '0.001', 'e.g. 1.215') +
+    field('cf-clen', 'Your case length (in) &mdash; optional', p.caseLenIn, '0.001', 'e.g. 2.005') +
+    field('cf-dia', 'Bullet diameter (in)', p.diaIn, '0.001') +
+    '</div>' +
+    '<div class="cf-out" id="cf-result" role="status"></div>' +
+    '<p class="setup-tip"><b>How to measure:</b> weigh a fired case from this lot empty, fill it with water to the brim of the mouth, and weigh again &mdash; the difference is its capacity in grains of water. For the powder, either enter its bulk density, or pour this powder into the same case until level with the mouth (no tapping) and enter that weight. Bullet and case length (with the published COAL' + (isNum(l.coalIn) ? ' of ' + l.coalIn.toFixed(3) + '&Prime;' : '') + ') account for the room the seated bullet takes.</p>' +
+    '</details>';
+}
+// Recompute from the box's inputs and update the result, the summary and the ladder's
+// "% case fill" cells in place (no re-render, so typing never loses focus).
+function updateCaseFill(l) {
+  const box = $('#cf-box');
+  if (!box) return;
+  const read = (id, lim) => { const v = parseFloat($(id).value); return (isFinite(v) && v >= lim[0] && v <= lim[1]) ? v : undefined; };
+  const k = fillKeys(l), f = state.fill;
+  const set = (bucket, key, v) => { if (v === undefined) delete f[bucket][key]; else f[bucket][key] = v; };
+  const cap = read('#cf-cap', FILL_LIMITS.cap);
+  set('cap', k.cap, cap);
+  const pf = parseFloat($('#cf-pf').value);
+  if (isNum(cap) && isFinite(pf) && pf > 0) {
+    // powder that fills the case to the mouth -> its bulk density
+    const bdFromFill = pf * WATER_G_PER_CC / cap;
+    if (bdFromFill >= FILL_LIMITS.bd[0] && bdFromFill <= FILL_LIMITS.bd[1]) $('#cf-bd').value = bdFromFill.toFixed(3);
+  }
+  set('bd', k.powder, read('#cf-bd', FILL_LIMITS.bd));
+  set('blen', k.bullet, read('#cf-blen', FILL_LIMITS.blen));
+  set('clen', k.cap, read('#cf-clen', FILL_LIMITS.clen));
+  const dia = read('#cf-dia', FILL_LIMITS.dia);
+  if (dia === undefined || dia === BULLET_DIA[l.cartridge]) delete f.dia[k.cart]; else f.dia[k.cart] = dia;
+  const charge = read('#cf-charge', FILL_LIMITS.charge);
+  if (charge === undefined) delete state.fillCharge[l.id]; else state.fillCharge[l.id] = charge;
+
+  const p = fillInputs(l);
+  const r = caseFill(charge, p, l.coalIn);
+  const out = $('#cf-result'), sum = $('#cf-summary');
+  document.querySelectorAll('#recipe-card .cf-col').forEach(el => { el.style.display = r ? '' : 'none'; });
+  document.querySelectorAll('#recipe-card .cf-cell').forEach(td => {
+    const rr = caseFill(parseFloat(td.dataset.ch), p, l.coalIn);
+    td.textContent = rr ? Math.round(rr.pct) + '%' : '—';
+  });
+  if (!isNum(charge)) { out.innerHTML = '<p class="empty-note" style="padding:6px 0;text-align:left">Enter a charge.</p>'; sum.textContent = ''; return; }
+  if (!r) {
+    out.innerHTML = '<p class="empty-note" style="padding:6px 0;text-align:left">Enter your case&rsquo;s water capacity and the powder&rsquo;s bulk density (or the powder that fills the case) to see the case fill for ' + fmt1(charge) + ' gr.</p>';
+    sum.textContent = '— needs your case and powder measurements';
+    return;
+  }
+  const pct = Math.round(r.pct);
+  sum.textContent = '— ' + fmt1(charge) + ' gr ≈ ' + pct + '%';
+  const notes = [];
+  if (charge > l.maxChargeGr + 1e-9) notes.push('<div class="warnbox" style="margin-top:8px"><b>' + fmt1(charge) + ' gr is ABOVE the published maximum (' + fmt1(l.maxChargeGr) + ' gr).</b> Do not load it, whatever the case fill.</div>');
+  else if (isNum(l.startChargeGr) && charge < l.startChargeGr - 1e-9) notes.push('<p class="status-line status-below"><span class="icon">&#9888;</span><span>' + fmt1(charge) + ' gr is below the published start (' + fmt1(l.startChargeGr) + ' gr).</span></p>');
+  if (r.pct >= 100) notes.push('<p class="status-line status-nearmax"><span class="icon">&#9888;</span><span><b>Compressed:</b> the seated bullet would press on the powder. Only load a compressed charge where the published data shows one (a &ldquo;C&rdquo; or compressed note).</span></p>');
+  else if (r.depth === null && r.pct >= 90) notes.push('<p class="status-line status-nearmax"><span class="icon">&#9888;</span><span>Close to full at the mouth: once a bullet is seated this may be compressed. Add bullet and case length for a closer figure.</span></p>');
+  const atMax = caseFill(l.maxChargeGr, p, l.coalIn);
+  if (/compress/i.test(l.loadNotes || '') && atMax && atMax.pct < 95)
+    notes.push('<p class="status-line status-nearmax"><span class="icon">&#9888;</span><span>The source marks the maximum as compressed, but these measurements put it at only ' + Math.round(atMax.pct) + '%' +
+      (atMax.depth === null ? ' measured to the case mouth. Add bullet and case length: the seated bullet usually makes up the difference.' : '. Re-check your measurements.') + '</span></p>');
+  out.innerHTML = '<div><span class="cf-big">' + pct + '%</span> case fill for <b>' + fmt1(charge) + ' gr</b></div>' +
+    '<div class="tile-delta">The powder takes about ' + r.powderH2O.toFixed(1) + ' gr H&#8322;O of ' + r.usable.toFixed(1) + ' gr H&#8322;O usable ' +
+    (r.depth !== null ? '(' + p.capH2O.toFixed(1) + ' capacity &minus; ' + r.intrusion.toFixed(1) + ' for the bullet seated ' + r.depth.toFixed(3) + '&Prime; deep at the published COAL)' : '(measured to the case mouth; a seated bullet raises the fill &mdash; add bullet and case length)') + '.</div>' +
+    notes.join('') +
+    '<p class="tip" style="color:var(--ink-2);font-size:12.5px;margin:6px 0 0">An estimate from your measurements; brass, sizing, seating depth and powder lot all change it. It never changes the published limits.</p>';
+}
+
 /* ============================ render: picker ============================ */
 function renderCartridges() {
   const sel = $('#sel-cartridge');
@@ -1324,13 +1465,13 @@ function renderRecipe() {
     const velHead = d !== 0 ? 'Est. fps (yours / test)' : 'Est. velocity (fps)';
     ladderHTML = '<h3 style="margin:16px 0 2px;font-size:15px">Work-up ladder</h3>' +
       '<p class="tip" style="color:var(--ink-2);font-size:13px;margin:0 0 4px">Load 5&ndash;10 rounds per step. Fire lowest first; inspect every case and chronograph each step before moving up. Stop at your target velocity or the first pressure sign &mdash; whichever comes first.</p>' +
-      '<table class="ladder"><thead><tr><th>Step</th><th>Charge (gr)</th><th>' + velHead + '</th><th>% of span</th></tr></thead><tbody>' +
+      '<table class="ladder"><thead><tr><th>Step</th><th>Charge (gr)</th><th>' + velHead + '</th><th>% of span</th><th class="cf-col" style="display:none">% case fill</th></tr></thead><tbody>' +
       steps.map((ch, i) => {
         const ev = estVelAt(l, ch);
         const velCell = d !== 0 ? fmt0(ev + d) + ' / ' + fmt0(ev) : fmt0(ev);
         const frac = (ch - l.startChargeGr) / (l.maxChargeGr - l.startChargeGr);
         const last = i === steps.length - 1;
-        return '<tr' + (last ? ' class="target-row"' : '') + '><td>' + (i === 0 ? 'start' : (last ? 'target' : i + 1)) + '</td><td>' + fmt1(ch) + '</td><td>' + velCell + '</td><td>' + Math.round(frac * 100) + '%</td></tr>';
+        return '<tr' + (last ? ' class="target-row"' : '') + '><td>' + (i === 0 ? 'start' : (last ? 'target' : i + 1)) + '</td><td>' + fmt1(ch) + '</td><td>' + velCell + '</td><td>' + Math.round(frac * 100) + '%</td><td class="cf-col cf-cell" style="display:none" data-ch="' + ch + '"></td></tr>';
       }).join('') +
       '</tbody></table>';
   }
@@ -1380,6 +1521,7 @@ function renderRecipe() {
     '<div class="recipe-grid"><div>' +
     '<table class="spec"><tbody>' + rowsSpec.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table>' +
     ladderHTML +
+    caseFillHTML(l, (c.status === 'ok' || c.status === 'nearmax') ? c.chargeGr : (c.status === 'below' ? l.startChargeGr : l.maxChargeGr)) +
     '</div><div class="chart-wrap">' + chartSVG(l, c, logEntriesFor(l)) +
     '<div class="warnbox"><b>Before you load:</b> open the source link and confirm every number. Start at the start charge. Watch for pressure signs (Safety tab). Velocities are from the publisher’s test barrel &mdash; chronograph your own.</div>' +
     '</div></div>' +
@@ -1401,6 +1543,16 @@ function renderRecipe() {
   $('#btn-bal-this')?.addEventListener('click', () => { showTab('ballistics'); ballisticsFillFromRecipe(); });
   holder.querySelectorAll('[data-logedit]').forEach(b => b.addEventListener('click', () => openLogEntry(state.log.find(e => e.id === b.dataset.logedit))));
   holder.querySelectorAll('[data-logdel]').forEach(b => b.addEventListener('click', () => deleteLogEntry(b.dataset.logdel)));
+  // case fill: recompute as the user types, remember measurements when a field is left
+  const cfBox = $('#cf-box');
+  if (cfBox) {
+    cfBox.addEventListener('toggle', () => { state.fillOpen = cfBox.open; });
+    cfBox.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', () => updateCaseFill(l));
+      inp.addEventListener('change', () => { updateCaseFill(l); saveFill(); });
+    });
+    updateCaseFill(l);
+  }
 }
 function deleteLogEntry(id) {
   const e = state.log.find(x => x.id === id);

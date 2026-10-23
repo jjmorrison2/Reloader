@@ -12,6 +12,11 @@ no install, no server, no internet required.
    - where your target sits inside the published velocity band;
    - a full **recipe card** (components, COAL, primer, case, source link) with a
      **work-up ladder** from the published starting charge to the estimated charge.
+   A **Case fill** box on the recipe card shows what percent of the case a charge fills (load
+   density), and the ladder gains a % case fill column. Enter your fired case's water capacity
+   and the powder's bulk density (or the weight of that powder that fills the case to the mouth);
+   bullet and case length account for the seated bullet. These measurements are remembered per
+   case and powder. The library has no published capacities or densities, so none are guessed.
 3. A **Load Library** tab lets you add, edit, import, and export load data transcribed from
    published sources. Your library is saved in the browser (localStorage). When a new version
    of the built-in library ships, your own and imported loads are carried over automatically.
