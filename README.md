@@ -37,13 +37,18 @@ no install, no server, no internet required.
    Your target is converted to each load's test-barrel equivalent before interpolating —
    charges never leave the published range. Twist is reference-only (stability, not pressure).
 
-Built-in library v5: **26 cartridges, 130 loads** — 9mm Luger, .38 Special, .44 Rem Mag, .45 ACP,
+Built-in library v6: **26 cartridges, 341 loads** — 9mm Luger, .38 Special, .44 Rem Mag, .45 ACP,
 .22-250 Rem, .223 Rem, .243 Win, .25-06 Rem, .260 Rem, 6.5 Creedmoor, 6.5 PRC, .270 Win, 7mm-08 Rem,
 7mm PRC, 7mm Rem Mag, .280 Rem, .30-30 Win, .300 Blackout (supersonic), .30-06 Springfield, .300 WSM,
 .308 Win, .300 Win Mag, .35 Rem, .350 Legend, .45-70 Govt (SAAMI-level table, not Trapdoor),
 .450 Bushmaster — transcribed live from Hodgdon's
-Reloading Data Center, Vihtavuori's Reloading Data Tool, and Nosler's official load-data
-PDFs — every load independently re-fetched and number-for-number verified.
+Reloading Data Center, Vihtavuori's Reloading Data Tool, Nosler's official load-data
+PDFs, and Barnes' load-data PDFs — every load independently re-fetched and number-for-number verified.
+
+Version 6 added 211 loads for hunting bullets in .308 Win, .30-06, .300 WSM, .300 Win Mag and
+7mm PRC: Hornady 165 gr CX and SST, Barnes 165 gr TTSX BT and 175 gr LRX BT (.30 cal),
+Barnes 160 gr LRX BT (7mm PRC), and Nosler 165 gr AccuBond. Nosler and Barnes print one table
+for several bullets of similar weight; each such load's notes say so.
 
 ## What it deliberately refuses to do
 
