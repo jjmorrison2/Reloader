@@ -777,27 +777,42 @@ const toText = (v) => {
 // as it was, under _unreadable and shown on the load's recipe card.
 function repairLoad(raw) {
   const l = dropNulls(Object.assign({}, raw));
-  const prev = l._unreadable;
-  const keep = Object.assign({}, (prev && typeof prev === 'object' && !Array.isArray(prev)) ? prev : {});
+  const fresh = {};   // values found unreadable in THIS pass
   LOAD_NUM_FIELDS.forEach(k => {
     if (l[k] === undefined || isNum(l[k])) return;
     const n = toNum(l[k]);
-    if (n !== undefined) l[k] = n; else { keep[k] = l[k]; delete l[k]; }
+    if (n !== undefined) l[k] = n; else { fresh[k] = l[k]; delete l[k]; }
   });
   LOAD_TEXT_FIELDS.forEach(k => {
     if (l[k] === undefined || typeof l[k] === 'string') return;
     const t = toText(l[k]);
-    if (t !== undefined) l[k] = t; else { keep[k] = l[k]; delete l[k]; }
+    if (t !== undefined) l[k] = t; else { fresh[k] = l[k]; delete l[k]; }
   });
-  // the published start is a pair: if one half could not be read, keep both aside
-  if (('startChargeGr' in keep) !== ('startVelocityFps' in keep)) {
-    const k = ('startChargeGr' in keep) ? 'startVelocityFps' : 'startChargeGr';
-    if (l[k] !== undefined) { keep[k] = l[k]; delete l[k]; }
+  // the published start is a pair: if one half could not be read now, keep both aside
+  if (('startChargeGr' in fresh) !== ('startVelocityFps' in fresh)) {
+    const k = ('startChargeGr' in fresh) ? 'startVelocityFps' : 'startChargeGr';
+    if (l[k] !== undefined) { fresh[k] = l[k]; delete l[k]; }
   }
   ['cartridge', 'powder', 'bulletDesc'].forEach(k => { if (typeof l[k] === 'string') l[k] = canon(l[k]); });
-  if (l.sourceUrl && !safeUrl(l.sourceUrl)) { keep.sourceUrl = l.sourceUrl; delete l.sourceUrl; }
+  if (l.sourceUrl && !safeUrl(l.sourceUrl)) { fresh.sourceUrl = l.sourceUrl; delete l.sourceUrl; }
+  // values kept by an earlier pass stay kept, unless the field now holds a usable
+  // value (e.g. the user re-entered it); they never strip a field that is valid now
+  const prev = l._unreadable, keep = {};
+  if (prev && typeof prev === 'object' && !Array.isArray(prev)) {
+    Object.keys(prev).forEach(k => { if (l[k] === undefined) keep[k] = prev[k]; });
+  }
+  Object.assign(keep, fresh);
   if (Object.keys(keep).length) l._unreadable = keep; else delete l._unreadable;
   return l;
+}
+// After the user saves values for some fields, what was kept unreadable for those
+// fields is out of date. The start pair is one unit.
+function pruneUnreadable(obj, supplied) {
+  if (!obj._unreadable) return;
+  const k = Object.assign({}, obj._unreadable);
+  supplied.forEach(f => delete k[f]);
+  if (supplied.includes('startChargeGr') || supplied.includes('startVelocityFps')) { delete k.startChargeGr; delete k.startVelocityFps; }
+  if (Object.keys(k).length) obj._unreadable = k; else delete obj._unreadable;
 }
 
 /* ============================ storage ============================ */
@@ -1564,6 +1579,7 @@ function saveEdit() {
         'Cancel: keep them under the old cartridge, bullet and powder in the Load Log.');
     }
     Object.keys(rec).forEach(k => { if (rec[k] === undefined) delete l[k]; else l[k] = rec[k]; });
+    pruneUnreadable(l, Object.keys(rec).filter(k => rec[k] !== undefined));
     if (wasBuiltin) { l.origin = 'user'; delete l.verified; } // edited data is no longer the verified transcription
     if (attached.length) {
       attached.forEach(e => {
@@ -1640,8 +1656,7 @@ const LOG_TEXT_FIELDS = ['id','loadId','loadSource','date','rifle','notes'];
 const LOG_ID_FIELDS = ['cartridge','bulletDesc','powder'];
 function normalizeLogEntry(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const prev = raw._unreadable;
-  const keep = Object.assign({}, (prev && typeof prev === 'object' && !Array.isArray(prev)) ? prev : {});
+  const keep = {};
   const e = {};
   // same conversions as repairLoad; a known value that cannot be converted is kept
   // aside under _unreadable instead of being lost
@@ -1661,6 +1676,7 @@ function normalizeLogEntry(raw) {
     else if (shots.length) e.shots = shots;
   } else if (raw.shots != null) keep.shots = raw.shots;
   e.pressure = Array.isArray(raw.pressure) ? raw.pressure.filter(p => typeof p === 'string' && p.trim()).map(p => p.trim()) : [];
+  if (Array.isArray(raw.pressure) && raw.pressure.some(p => typeof p !== 'string')) keep.pressure = raw.pressure;
   if (raw.pressure != null && !Array.isArray(raw.pressure)) {
     if (typeof raw.pressure === 'string' && raw.pressure.trim()) e.pressure = [raw.pressure.trim()];
     else keep.pressure = raw.pressure;
@@ -1669,6 +1685,14 @@ function normalizeLogEntry(raw) {
   const st = e.shots ? shotStats(e.shots) : null;
   if (st) { e.avgFps = st.avg; e.sdFps = st.sd; e.esFps = st.es; e.n = st.n; }
   else { delete e.shots; delete e.sdFps; delete e.esFps; delete e.n; }
+  // values kept by an earlier pass stay kept unless the field now holds a usable value
+  const prev = raw._unreadable;
+  if (prev && typeof prev === 'object' && !Array.isArray(prev)) {
+    Object.keys(prev).forEach(k => {
+      const usable = k === 'pressure' ? e.pressure.length > 0 : e[k] !== undefined;
+      if (!(k in keep) && !usable) keep[k] = prev[k];
+    });
+  }
   if (Object.keys(keep).length) e._unreadable = keep;
   return e;
 }
@@ -1680,13 +1704,15 @@ function loadLog() {
       const a = JSON.parse(raw);
       if (Array.isArray(a)) {
         const ok = [], bad = [];
-        let changed = false;
+        let changed = false, kept = 0;
         a.forEach(r => {
           const e = normalizeLogEntry(r);
           if (!e) { bad.push(r); return; }
           if (JSON.stringify(e) !== JSON.stringify(r)) changed = true;
+          if (e._unreadable && JSON.stringify(e._unreadable) !== JSON.stringify(r && r._unreadable)) kept++;
           ok.push(e);
         });
+        if (kept) startupNotices.push(kept + ' saved log entr' + (kept === 1 ? 'y has' : 'ies have') + ' values that could not be read. They are kept and listed in the Load Log.');
         // every entry needs its own string id so it can be edited and deleted
         const seen = new Set();
         ok.forEach((e, i) => {
@@ -1753,6 +1779,9 @@ function logEntriesFor(l) {
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 }
 function pressureBadge(e) {
+  // never claim "no pressure signs" when a pressure record exists but could not be read
+  if (e._unreadable && 'pressure' in e._unreadable && !(e.pressure && e.pressure.length))
+    return '<span class="badge unverified" title="This entry has a pressure record the app could not read.">&#9888; pressure record unreadable</span>';
   return (e.pressure && e.pressure.length)
     ? '<span class="badge unverified" title="' + esc(e.pressure.join(', ')) + '">&#9888; ' + esc(e.pressure.join(', ')) + '</span>'
     : '<span class="badge verified">&#10003; no pressure signs</span>';
@@ -1778,7 +1807,8 @@ function logRowHTML(e, showLoad) {
     '<td class="num">' + (isNum(e.avgFps) ? fmt0(e.avgFps) + stats : '—') + '</td>' +
     '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + fmt0(isNum(e.groupYd) ? e.groupYd : 100) + ' yd' : '—') + '</td>' +
     '<td class="num">' + (isNum(e.tempF) ? e.tempF + '&deg;F' : '—') + '</td>' +
-    '<td>' + pressureBadge(e) + (e.notes ? '<br><span style="color:var(--ink-2)">' + esc(e.notes) + '</span>' : '') + (e.rifle ? '<br><span style="color:var(--muted);font-size:12px">' + esc(e.rifle) + '</span>' : '') + '</td>' +
+    '<td>' + pressureBadge(e) + (e.notes ? '<br><span style="color:var(--ink-2)">' + esc(e.notes) + '</span>' : '') + (e.rifle ? '<br><span style="color:var(--muted);font-size:12px">' + esc(e.rifle) + '</span>' : '') +
+      (e._unreadable ? '<br><span style="color:var(--critical);font-size:12px">Could not read: ' + esc(Object.keys(e._unreadable).map(k => k + ': ' + JSON.stringify(e._unreadable[k])).join('; ')) + '</span>' : '') + '</td>' +
     '<td style="white-space:nowrap"><button class="rowbtn" data-logedit="' + esc(e.id) + '">edit</button><button class="rowbtn del" data-logdel="' + esc(e.id) + '">delete</button></td>' +
     '</tr>';
 }
@@ -1853,6 +1883,16 @@ function saveLogEntry() {
   };
   Object.keys(e).forEach(k => { if (e[k] === undefined) delete e[k]; });
   const i = state.log.findIndex(x => x.id === e.id);
+  // values that could not be read stay with the entry unless this form now supplies them
+  const old = i >= 0 ? state.log[i] : null;
+  if (old && old._unreadable) {
+    const kept = {};
+    Object.keys(old._unreadable).forEach(f => {
+      const supplied = f === 'pressure' ? e.pressure.length > 0 : e[f] !== undefined;
+      if (!supplied) kept[f] = old._unreadable[f];
+    });
+    if (Object.keys(kept).length) e._unreadable = kept;
+  }
   if (i >= 0) state.log[i] = e; else state.log.push(e);
   saveLog();
   renderLog(); renderRecipe();
