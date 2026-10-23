@@ -15,7 +15,8 @@ no install, no server, no internet required.
 3. A **Load Library** tab lets you add, edit, import, and export load data transcribed from
    published sources. Your library is saved in the browser (localStorage). When a new version
    of the built-in library ships, your own and imported loads are carried over automatically.
-   Saved records the app cannot use are set aside in storage, never deleted.
+   Saved data is never silently discarded: a value the app cannot read is kept with its load
+   and listed on the recipe card, and a record it cannot use at all is set aside in storage.
 4. A **Load Log** tab records your range sessions per load — charge fired, chronograph string
    (average/SD/ES computed), group size, temperature, pressure signs, notes. Entries appear on the
    recipe card and are plotted against the published curve; export/import as JSON. A logged
