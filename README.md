@@ -12,11 +12,14 @@ no install, no server, no internet required.
    - where your target sits inside the published velocity band;
    - a full **recipe card** (components, COAL, primer, case, source link) with a
      **work-up ladder** from the published starting charge to the estimated charge.
+   Picking a powder jumps straight to its recipe card; **↑ All N powders** takes you back to the list.
    A **Case fill** box on the recipe card shows what percent of the case a charge fills (load
-   density), and the ladder gains a % case fill column. Enter your fired case's water capacity
-   and the powder's bulk density (or the weight of that powder that fills the case to the mouth);
-   bullet and case length account for the seated bullet. These measurements are remembered per
-   case and powder. The library has no published capacities or densities, so none are guessed.
+   density), and the ladder gains a % case fill column. Where Hodgdon or Nosler publish load
+   density for that load, it is used directly (scaled with the charge). Otherwise, enter your
+   fired case's water capacity and the powder's bulk density (or the weight of that powder that
+   fills the case to the mouth); bullet and case length account for the seated bullet. Your own
+   measurements, remembered per case and powder, take priority over the published figure.
+   Nothing is guessed when neither is available.
 3. A **Load Library** tab lets you add, edit, import, and export load data transcribed from
    published sources. Your library is saved in the browser (localStorage). When a new version
    of the built-in library ships, your own and imported loads are carried over automatically.
@@ -28,6 +31,17 @@ no install, no server, no internet required.
    charge above the published maximum is flagged in the log tables, on the recipe chart, and
    when the Ballistics tab uses that session's velocity; one below the published start is
    flagged in the log tables.
+   **Target photo:** take or choose a photo of your target and mark it on screen instead of
+   measuring by hand. Three steps: set the scale (tap two points a known distance apart, such as
+   two 1″ grid lines, or the four corners of a known rectangle for a photo taken at an angle), tap
+   your aim point (optional), then tap each bullet hole. Pinch or scroll to zoom; press and hold
+   for a magnifier; drag a mark to fine-tune it. It computes group size (center to center), mean
+   radius, width × height, and where the group sits relative to your aim, in inches, MOA and
+   mils, and fills the group size into the log entry. The shot positions are saved with the log
+   entry and included in its JSON export; the photo itself stays on this device (browser storage)
+   and is not exported. When you're
+   working up a ladder, after saving it offers to mark the next charge's group on the same sheet,
+   with the earlier groups shown dimmed.
 5. A **Ballistics** tab runs a point-mass trajectory (standard G1/G7 drag curves) from your muzzle
    velocity and the bullet maker's BC: drop, MOA, wind drift, velocity, energy, time of flight.
    "Fill from selected recipe" uses your logged average velocity when you have one.
