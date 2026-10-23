@@ -230,7 +230,7 @@
     table.log-table tr { padding: 8px 0; border-bottom: 1px solid var(--grid); }
     table.log-table tr.cart-head { padding: 0; border: 0; }
     table.log-table tr.cart-head td { padding: 6px 8px; }
-    table.log-table td { border: 0; padding: 2px 0; white-space: normal; }
+    table.lib.log-table td { border: 0; padding: 2px 0; white-space: normal; overflow-wrap: anywhere; }
     table.log-table td[data-label] { position: relative; padding-left: 88px; min-height: 1.4em; }
     table.log-table td[data-label]::before {
       content: attr(data-label); position: absolute; left: 0; top: 4px; width: 80px;
@@ -3468,6 +3468,7 @@ function pressSelector(target) {
   if (el.tagName === 'SUMMARY') return el.parentElement && el.parentElement.id ? '#' + CSS.escape(el.parentElement.id) + ' > summary' : null;
   const sel = reFindSelector(el);
   if (sel) return sel;
+  if (el.tagName === 'A' && el.hasAttribute('href')) return 'a[href="' + CSS.escape(el.getAttribute('href')) + '"]';
   const a = ['data-logdel', 'data-tgtview'].find(x => el.hasAttribute(x));
   return a ? '[' + a + '="' + CSS.escape(el.getAttribute(a)) + '"]' : null;
 }
@@ -3476,9 +3477,9 @@ document.addEventListener('click', (e) => {
   const sel = pressSelector(e.target);
   flushPress();
   if (e.target.isConnected) return;
-  e.stopPropagation(); e.preventDefault();
   const now = sel && [...document.querySelectorAll(sel)].find(el => el.offsetParent !== null);
-  if (!now) return;
+  if (!now) return;   // nothing to hand it to: let the original click run (a detached link still opens)
+  e.stopPropagation(); e.preventDefault();
   now.focus({ preventScroll: true });
   if (!/^(INPUT|SELECT|TEXTAREA)$/.test(now.tagName)) now.click();
 }, true);
@@ -3553,7 +3554,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // a cleared or invalid entry shows the current target again rather than going blank
     if (!isFinite(n)) { $('#inp-vel').value = isNum(state.targetVel) ? state.targetVel : ''; return; }
     const lo = parseFloat($('#inp-vel').min), hi = parseFloat($('#inp-vel').max);
-    const snapped = fromSlider ? Math.round(n / 5) * 5 : Math.round(n);   // the slider moves in 5 fps steps
+    // The slider moves in 5 fps steps: to the nearest one while dragging (a drag must never step
+    // back), otherwise in the direction it moved, so a small step from assistive technology,
+    // which sends no key press, isn't rounded straight back to where it was.
+    const cur = isNum(state.targetVel) ? state.targetVel : n;
+    const snapped = !fromSlider ? Math.round(n)
+      : (pointerPress.down || n === cur) ? Math.round(n / 5) * 5
+      : n > cur ? Math.ceil(n / 5) * 5 : Math.floor(n / 5) * 5;
     state.targetVel = Math.max(lo, Math.min(hi, snapped));
     $('#inp-vel').value = state.targetVel;
     $('#rng-vel').value = state.targetVel;
@@ -3616,8 +3623,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const tOk = isFinite(tn) && tn >= -40 && tn <= 130;
     if (traw && !tOk) setupMsg.push('Temperature must be −40 to 130 °F, so it was not changed' + (isNum(state.setup.tempF) ? ' (still ' + state.setup.tempF + ' °F).' : '.'));
     else state.setup.tempF = tOk ? tn : null;
-    state.setup.fpsPerInch = clampNum($('#s-fpi').value, 0, 100) ?? SETUP_DEFAULTS.fpsPerInch;
-    state.setup.fpsPerDegF = clampNum($('#s-fpd').value, 0, 5) ?? SETUP_DEFAULTS.fpsPerDegF;
+    // a malformed factor (e.g. "3-5") keeps the saved one; an emptied field goes back to the default
+    if ($('#s-fpi').validity.badInput) setupMsg.push('fps per inch must be a number from 0 to 100, so it was not changed (still ' + state.setup.fpsPerInch + ').');
+    else state.setup.fpsPerInch = clampNum($('#s-fpi').value, 0, 100) ?? SETUP_DEFAULTS.fpsPerInch;
+    if ($('#s-fpd').validity.badInput) setupMsg.push('fps per °F must be a number from 0 to 5, so it was not changed (still ' + state.setup.fpsPerDegF + ').');
+    else state.setup.fpsPerDegF = clampNum($('#s-fpd').value, 0, 5) ?? SETUP_DEFAULTS.fpsPerDegF;
     saveSetup();
     $('#setup-msg').textContent = setupMsg.join(' ');
     afterPress(() => { renderSetupPanel(); renderVelocity(); renderResults(); });
@@ -3687,11 +3697,17 @@ document.addEventListener('DOMContentLoaded', () => {
       // restored one) instead of attaching to the restored built-in.
       const seeded = seedLibrary(), seededIds = new Set(seeded.map(l => l.id)), stamp = Date.now().toString(36);
       const owner = new Map(state.log.map(e => [e, resolveEntry(e)]));   // before any id changes
-      mine.forEach((l, i) => { if (seededIds.has(l.id)) l.id = 'r' + stamp + '_' + i; });
+      const oldId = new Map();
+      mine.forEach((l, i) => { if (seededIds.has(l.id)) { oldId.set(l, l.id); l.id = 'r' + stamp + '_' + i; } });
       let moved = false;
       state.log.forEach(e => {
-        const r = owner.get(e);
-        if (r && r.firm && r.load && mine.includes(r.load) && e.loadId !== r.load.id) { e.loadId = r.load.id; moved = true; }
+        const r = owner.get(e), l = r && r.firm && r.load;
+        if (!l || !mine.includes(l) || e.loadId === l.id) return;
+        // only an entry recorded against this very load: by its old id, or by the max and source
+        // it remembers (a look-alike from another manual is not the load it was recorded against)
+        const recorded = e.loadId === oldId.get(l) ||
+          (isNum(e.loadMaxGr) && l.maxChargeGr === e.loadMaxGr && (e.loadSource === undefined || (l.sourceUrl || l.sourceName || '') === e.loadSource));
+        if (recorded) { e.loadId = l.id; moved = true; }
       });
       state.lib = sanitizeIds(seeded.concat(mine));
       saveLibrary(state.lib);
