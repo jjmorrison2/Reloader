@@ -3549,6 +3549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     state.bulletKey = e.target.value; state.selectedLoadId = null; state.targetVel = null;
     renderVelocity(); renderResults();
   });
+  let sliderHeld = false;
   const velChange = (v, fromSlider) => {
     const n = parseFloat(v);
     // a cleared or invalid entry shows the current target again rather than going blank
@@ -3559,7 +3560,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // which sends no key press, isn't rounded straight back to where it was.
     const cur = isNum(state.targetVel) ? state.targetVel : n;
     const snapped = !fromSlider ? Math.round(n)
-      : (pointerPress.down || n === cur) ? Math.round(n / 5) * 5
+      : (sliderHeld || n === cur) ? Math.round(n / 5) * 5
       : n > cur ? Math.ceil(n / 5) * 5 : Math.floor(n / 5) * 5;
     state.targetVel = Math.max(lo, Math.min(hi, snapped));
     $('#inp-vel').value = state.targetVel;
@@ -3568,6 +3569,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   $('#inp-vel').addEventListener('change', (e) => velChange(e.target.value));
   $('#rng-vel').addEventListener('input', (e) => velChange(e.target.value, true));
+  // held while the slider is pressed: its own flag, since a deferred render can end pointerPress early
+  $('#rng-vel').addEventListener('pointerdown', () => { sliderHeld = true; });
+  ['pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, () => { sliderHeld = false; }, true));
   // Keys step exactly 5 fps (50 with Page Up/Down) from the current target. The slider's own
   // key step is 1% of the band, which can round away to nothing or skip a 5 fps step.
   $('#rng-vel').addEventListener('keydown', (e) => {
@@ -3705,7 +3709,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!l || !mine.includes(l) || e.loadId === l.id) return;
         // only an entry recorded against this very load: by its old id, or by the max and source
         // it remembers (a look-alike from another manual is not the load it was recorded against)
-        const recorded = e.loadId === oldId.get(l) ||
+        const recorded = (oldId.has(l) && e.loadId === oldId.get(l)) ||
           (isNum(e.loadMaxGr) && l.maxChargeGr === e.loadMaxGr && (e.loadSource === undefined || (l.sourceUrl || l.sourceName || '') === e.loadSource));
         if (recorded) { e.loadId = l.id; moved = true; }
       });
