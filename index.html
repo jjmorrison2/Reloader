@@ -172,6 +172,7 @@
   .recipe h2 { font-size: 20px; margin: 0 0 2px; }
   .recipe .recipe-sub { color: var(--ink-2); font-size: 13.5px; margin: 0 0 14px; }
   .recipe-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; }
+  .recipe-grid > * { min-width: 0; }   /* a wide table scrolls inside its column, not the page */
   @media (max-width: 860px) { .recipe-grid { grid-template-columns: 1fr; } }
   table.spec { width: 100%; border-collapse: collapse; font-size: 14px; }
   table.spec th, table.spec td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
@@ -291,7 +292,7 @@
   }
   .tgtview-photo svg { display: block; width: 100%; height: auto; border-radius: 8px; }
   .toast {
-    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 70; width: max-content;
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 45; width: max-content;   /* under any open dialog */
     background: var(--ink); color: var(--page); border-radius: 12px; padding: 10px 12px;
     display: flex; gap: 10px; align-items: center; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: 14px;
   }
@@ -560,6 +561,7 @@
         </div>
         <input type="file" id="tgt-file-cam" accept="image/*" capture="environment" hidden>
         <input type="file" id="tgt-file" accept="image/*" hidden>
+        <p id="tgt-busy" class="tgt-summary" role="status" hidden>Opening the photo&hellip;</p>
         <div id="tgt-summary" class="tgt-summary"></div>
       </div>
       <div class="full"><label id="g-ps-label">Pressure signs</label>
@@ -1106,6 +1108,15 @@ const LOAD_NUM_FIELDS = ['bulletWeightGr','startChargeGr','startVelocityFps','ma
 // so an older export of the built-in data still matches.
 const PUBLISHED_EXTRA_FIELDS = ['startDensityPct', 'maxDensityPct'];
 const PROVENANCE_FIELDS = ['cartridge','bulletWeightGr','bulletDesc','powder','startChargeGr','startVelocityFps','startRule','maxChargeGr','maxVelocityFps','maxPressure','coalIn','primer','caseBrand','barrelLengthIn','sourceName','sourceUrl','loadNotes'];
+// Fields the Add/Edit load form can set (an unreadable value of any other field can only be
+// corrected in a library file that is imported again).
+const LOAD_FORM_FIELDS = ['cartridge','powder','bulletWeightGr','bulletDesc','startChargeGr','startVelocityFps','maxChargeGr','maxVelocityFps','coalIn','primer','caseBrand','barrelLengthIn','maxPressure','sourceName','sourceUrl','loadNotes'];
+function unreadableHint(bad) {
+  const other = Object.keys(bad).filter(k => !LOAD_FORM_FIELDS.includes(k));
+  if (!other.length) return 'check the source and re-enter them with Edit';
+  const fix = esc(other.join(', ')) + ' can only be corrected in an exported library file that you then import again';
+  return other.length === Object.keys(bad).length ? fix : 'check the source and re-enter them with Edit; ' + fix;
+}
 function matchesBuiltin(l) {
   return BUILTIN_LOADS.some(b => PROVENANCE_FIELDS.every(k => b[k] === l[k]));
 }
@@ -1172,6 +1183,7 @@ function pruneUnreadable(obj, supplied) {
 /* ============================ storage ============================ */
 const LS_LIB = 'rc.library.v' + BUILTIN_VERSION;
 const LS_ACK = 'rc.ack.v1';
+const TM_MAX_SHOTS = 200;   // the most shots one stored target group keeps
 const LS_SET_ASIDE = 'rc.library.unreadable';
 const startupNotices = [];
 const libIdRemap = Object.create(null);   // old load id -> new id, filled by a library migration
@@ -1222,6 +1234,10 @@ function refreshBuiltins(arr) {
     if (!b) { l.origin = 'imported'; delete l.verified; n++; return; }
     let changed = false;
     PROVENANCE_FIELDS.concat(PUBLISHED_EXTRA_FIELDS).forEach(k => { if (l[k] !== b[k]) { changed = true; if (b[k] === undefined) delete l[k]; else l[k] = b[k]; } });
+    if (l._unreadable) {   // the shipped value replaces an unreadable copy of a published field
+      PUBLISHED_EXTRA_FIELDS.forEach(k => { if (k in l._unreadable) { delete l._unreadable[k]; changed = true; } });
+      if (!Object.keys(l._unreadable).length) delete l._unreadable;
+    }
     if (l.verified !== 'confirmed') { l.verified = 'confirmed'; changed = true; }
     if (changed) n++;
   });
@@ -1630,7 +1646,7 @@ function publishedFill(l) {
   const sc = l.startChargeGr, mc = l.maxChargeGr, sd = l.startDensityPct, md = l.maxDensityPct;
   if (!isNum(sc) || !isNum(mc) || !isNum(sd) || !isNum(md) || sc <= 0 || mc <= 0) return null;
   const k = (sd * sc + md * mc) / (sc * sc + mc * mc);
-  const src = (l.sourceName || 'the publisher').split(/[ ,]/)[0];
+  const src = (l.sourceName || '').trim().split(/[ ,]/)[0] || 'the publisher';
   return { pctAt: (charge) => k * charge, start: sd, max: md, src };
 }
 function caseFillHTML(l, defaultCharge) {
@@ -1696,7 +1712,7 @@ function updateCaseFill(l) {
     const v = fillAt(parseFloat(td.dataset.ch));
     td.textContent = isNum(v) ? Math.round(v) + '%' : '—';
   });
-  const pubLine = pub ? '<div class="tile-delta">' + esc(pub.src) + ' publishes ' + pub.start + '% at the start (' + fmt1(l.startChargeGr) + ' gr) and ' + pub.max + '% at the max (' + fmt1(l.maxChargeGr) + ' gr), in its ' + (l.caseBrand ? esc(l.caseBrand) + ' ' : '') + 'case at ' + (isNum(l.coalIn) ? l.coalIn.toFixed(3) + '&Prime; COAL' : 'the published COAL') + '.</div>' : '';
+  const pubLine = pub ? '<div class="tile-delta">' + esc(pub.src.charAt(0).toUpperCase() + pub.src.slice(1)) + ' publishes ' + pub.start + '% at the start (' + fmt1(l.startChargeGr) + ' gr) and ' + pub.max + '% at the max (' + fmt1(l.maxChargeGr) + ' gr), in its ' + (l.caseBrand ? esc(l.caseBrand) + ' ' : '') + 'case at ' + (isNum(l.coalIn) ? l.coalIn.toFixed(3) + '&Prime; COAL' : 'the published COAL') + '.</div>' : '';
   if (!isNum(charge)) { out.innerHTML = '<p class="empty-note" style="padding:6px 0;text-align:left">Enter a charge.</p>' + pubLine; sum.textContent = ''; return; }
   if (!isNum(pctRaw)) {
     out.innerHTML = '<p class="empty-note" style="padding:6px 0;text-align:left">This source doesn&rsquo;t publish case fill. Enter your case&rsquo;s water capacity and the powder&rsquo;s bulk density (or the powder that fills the case) to see it for ' + fmt1(charge) + ' gr.</p>';
@@ -1907,7 +1923,7 @@ function renderRecipe() {
     ['Case', l.caseBrand ? esc(l.caseBrand) : 'as specified by the source'],
     ['Test barrel', isNum(l.barrelLengthIn) ? l.barrelLengthIn + '&Prime;' : 'see source'],
     l.loadNotes ? ['Notes', esc(l.loadNotes)] : null,
-    l._unreadable ? ['Values that could not be read', '<span style="color:var(--critical)">' + esc(Object.keys(l._unreadable).map(k => k + ': ' + JSON.stringify(l._unreadable[k])).join('; ')) + '</span> (kept as stored &mdash; check the source and re-enter them)'] : null,
+    l._unreadable ? ['Values that could not be read', '<span style="color:var(--critical)">' + esc(Object.keys(l._unreadable).map(k => k + ': ' + JSON.stringify(l._unreadable[k])).join('; ')) + '</span> (kept as stored &mdash; ' + unreadableHint(l._unreadable) + ')'] : null,
     ['Source', sourceCellHTML(l) + ' ' + badgeFor(l)],
   ].filter(Boolean);
 
@@ -1939,10 +1955,13 @@ function renderRecipe() {
     setTimeout(done, 60000);   // fallback if a browser never fires afterprint
   });
   $('#btn-back-results')?.addEventListener('click', () => {
-    const sel = holder.ownerDocument.querySelector('#results .load-card.selected') || $('#results');
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    $('#panel-calc').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    if (sel && sel.focus) sel.focus({ preventScroll: true });
+    const cards = [...document.querySelectorAll('#results .load-card')];
+    const sel = cards.find(c => c.classList.contains('selected')) || cards[0];
+    const behavior = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    // land where focus goes: the top of the list, or the card you came from further down it
+    if (!sel || sel === cards[0]) $('#panel-calc').scrollIntoView({ behavior, block: 'start' });
+    else sel.scrollIntoView({ behavior, block: 'center' });
+    if (sel) sel.focus({ preventScroll: true });
   });
   $('#btn-log-this')?.addEventListener('click', () => openLogEntry({ loadId: l.id, chargeGr: l.startChargeGr }, showLadder ? ladderFor(l, ladderTarget) : null));
   $('#btn-bal-this')?.addEventListener('click', () => { showTab('ballistics'); ballisticsFillFromRecipe(); });
@@ -1953,7 +1972,10 @@ function renderRecipe() {
   const cfBox = $('#cf-box');
   if (cfBox) {
     cfBox.addEventListener('toggle', (e) => { if (e.target === cfBox) state.fillOpen = cfBox.open; });
-    $('#cf-measure')?.addEventListener('toggle', (e) => { e.stopPropagation(); state.fillMeasureOpen = $('#cf-measure').open; });
+    // remember only the user's own open/close, not the open state a load without published data renders with
+    const measure = $('#cf-measure');
+    let shown = measure ? measure.open : false;
+    measure?.addEventListener('toggle', (e) => { e.stopPropagation(); if (measure.open !== shown) { shown = measure.open; state.fillMeasureOpen = measure.open; } });
     cfBox.querySelectorAll('input').forEach(inp => {
       inp.addEventListener('input', () => updateCaseFill(l));
       inp.addEventListener('change', () => { updateCaseFill(l); saveFill(); });
@@ -2124,13 +2146,18 @@ function saveEdit() {
   const problems = validateLoad(rec);
   if (problems.length) { alert('Cannot save:\n• ' + problems.join('\n• ')); return; }
 
-  const twin = state.lib.find(x => x.id !== state.editingId && sameLoadIdentity(x, rec) && (x.sourceUrl || '') === (rec.sourceUrl || '') && (x.sourceName || '') === (rec.sourceName || ''));
-  if (twin && !confirm('Your library already has ' + rec.cartridge + ' / ' + rec.bulletWeightGr + ' gr ' + rec.bulletDesc + ' / ' + rec.powder + ' from the same source. Range-log entries can only belong to one of them. Save a second copy anyway?')) return;
+  // ask only when this save creates a duplicate: an edit to a load that already had a twin doesn't
+  const sameKey = (a, b) => sameLoadIdentity(a, b) && (a.sourceUrl || '') === (b.sourceUrl || '') && (a.sourceName || '') === (b.sourceName || '');
+  const orig = state.editingId ? state.lib.find(x => x.id === state.editingId) : null;
+  const twin = (!orig || !sameKey(orig, rec)) && state.lib.find(x => x.id !== state.editingId && sameKey(x, rec));
+  if (twin && !confirm('Your library already has ' + rec.cartridge + ' / ' + rec.bulletWeightGr + ' gr ' + rec.bulletDesc + ' / ' + rec.powder + ' from the same source. Range-log entries can only belong to one of them. ' +
+    (orig ? 'Save this edit anyway?' : 'Save a second copy anyway?'))) return;
   if (state.editingId) {
     const l = state.lib.find(x => x.id === state.editingId);
     if (!l) { closeModal('#edit-back'); refreshAll(); return; }
     const wasBuiltin = l.origin === 'builtin';
-    const before = { startChargeGr: l.startChargeGr, maxChargeGr: l.maxChargeGr, coalIn: l.coalIn };
+    const before = { startChargeGr: l.startChargeGr, maxChargeGr: l.maxChargeGr, coalIn: l.coalIn,
+                     sameThing: sameLoadIdentity(l, rec) && canon(l.caseBrand) === canon(rec.caseBrand) };
     // Range-log entries recorded against this load: if the edit changes what the
     // load IS (cartridge, bullet or powder), ask whether they follow the edit.
     // Entries shown here only as the lowest-max pick among look-alike loads were not
@@ -2145,10 +2172,12 @@ function saveEdit() {
     }
     Object.keys(rec).forEach(k => { if (rec[k] === undefined) delete l[k]; else l[k] = rec[k]; });
     pruneUnreadable(l, Object.keys(rec).filter(k => rec[k] !== undefined));
-    // the published load density belongs to the published charges and COAL; once those
-    // change it no longer describes this load
-    if (before.startChargeGr !== l.startChargeGr || before.maxChargeGr !== l.maxChargeGr || before.coalIn !== l.coalIn)
-      PUBLISHED_EXTRA_FIELDS.forEach(k => delete l[k]);
+    // the published load density belongs to that cartridge, bullet, powder and case at the
+    // published charges and COAL; once any of those change it no longer describes this load
+    if (!before.sameThing || before.startChargeGr !== l.startChargeGr || before.maxChargeGr !== l.maxChargeGr || before.coalIn !== l.coalIn) {
+      PUBLISHED_EXTRA_FIELDS.forEach(k => { delete l[k]; if (l._unreadable) delete l._unreadable[k]; });
+      if (l._unreadable && !Object.keys(l._unreadable).length) delete l._unreadable;
+    }
     if (wasBuiltin) { l.origin = 'user'; delete l.verified; } // edited data is no longer the verified transcription
     if (attached.length) {
       attached.forEach(e => {
@@ -2202,6 +2231,7 @@ function importLibrary(file) {
       return;
     }
     if (!cleaned.length) { alert('No valid load entries found in that file.'); return; }
+    refreshBuiltins(cleaned);   // a row matching the built-in data takes its published density too
     const msg = 'Replace your current library (' + state.lib.length + ' loads) with the imported file (' + cleaned.length + ' valid loads' + (skipped ? '; ' + skipped + ' invalid entries skipped' : '') + ')? Export first if unsure.';
     if (!confirm(msg)) return;
     // never trust file-supplied ids, and never reuse an id from an earlier import:
@@ -2369,6 +2399,8 @@ function chargeFlagHTML(e) {
     return '<br><span class="badge unverified" title="Below the published starting charge: squib and erratic-pressure risk.">&#9888; below published start ' + fmt1(l.startChargeGr) + ' gr</span>';
   return '';
 }
+// The distance a logged group was shot at (100 yd when the entry doesn't say).
+const entryGroupYd = (e) => isNum(e.groupYd) ? e.groupYd : 100;
 function logRowHTML(e, showLoad) {
   const stats = isNum(e.sdFps) && isNum(e.esFps) && isNum(e.n) && e.n > 1
     ? ' <span style="color:var(--ink-2)">SD ' + fmt1(e.sdFps) + ' / ES ' + fmt0(e.esFps) + ' (n=' + fmt0(e.n) + ')</span>' : '';
@@ -2377,8 +2409,8 @@ function logRowHTML(e, showLoad) {
     (showLoad ? '<td>' + esc((isNum(e.bulletWeightGr) ? e.bulletWeightGr + ' gr ' : '') + (e.bulletDesc || '')) + '<br><span style="color:var(--ink-2)">' + esc(e.powder) + '</span></td>' : '') +
     '<td class="num">' + fmt1(e.chargeGr) + ' gr' + chargeFlagHTML(e) + '</td>' +
     '<td class="num">' + (isNum(e.avgFps) ? fmt0(e.avgFps) + stats : '—') + '</td>' +
-    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + fmt0(isNum(e.groupYd) ? e.groupYd : 100) + ' yd' +
-      '<br><span style="color:var(--ink-2)">' + inToMoa(e.groupIn, isNum(e.groupYd) ? e.groupYd : 100).toFixed(2) + ' MOA</span>' : '—') +
+    '<td class="num">' + (isNum(e.groupIn) ? e.groupIn.toFixed(2) + '&Prime; @ ' + fmt0(entryGroupYd(e)) + ' yd' +
+      (entryGroupYd(e) > 0 ? '<br><span style="color:var(--ink-2)">' + inToMoa(e.groupIn, entryGroupYd(e)).toFixed(2) + ' MOA</span>' : '') : '—') +
       (e.target ? '<br><button type="button" class="rowbtn tgt-view" data-tgtview="' + esc(e.id) + '" aria-label="View target">' + groupPlotSVG(e.target, 44, { grid: false }) + '<span>view</span></button>' : '') + '</td>' +
     '<td class="num">' + (isNum(e.tempF) ? e.tempF + '&deg;F' : '—') + '</td>' +
     '<td>' + pressureBadge(e) + (e.notes ? '<br><span style="color:var(--ink-2)">' + esc(e.notes) + '</span>' : '') + (e.rifle ? '<br><span style="color:var(--muted);font-size:12px">' + esc(e.rifle) + '</span>' : '') +
@@ -2404,18 +2436,25 @@ function localISODate(d) {
   d = d || new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+// Work-up ladder charges offered in the log form, only while the form is on the load they belong to.
+function logLadderSteps() {
+  const L = state.logLadder;
+  return L && L.loadId === $('#g-load').value ? L.steps : null;
+}
+function renderLadderList() { $('#dl-ladder').innerHTML = (logLadderSteps() || []).map(ch => '<option value="' + fmt1(ch) + '">').join(''); }
 function openLogEntry(prefill, ladderSteps, reuseTarget) {
   const e = prefill || {};
-  state.logLadder = ladderSteps || null;
+  state.logLadder = ladderSteps && e.loadId ? { loadId: e.loadId, steps: ladderSteps } : null;
   state.logEditing = e.id || null;
+  state.logSession = (state.logSession || 0) + 1;   // lets a slow photo load tell the form was closed or reopened
   const sel = $('#g-load');
   sel.innerHTML = '<option value="">— pick the load you fired —</option>' +
     state.lib.slice().sort((a, b) => a.cartridge.localeCompare(b.cartridge) || a.bulletWeightGr - b.bulletWeightGr || a.powder.localeCompare(b.powder))
     .map(l => '<option value="' + esc(l.id) + '">' + esc(l.cartridge + ' · ' + l.bulletWeightGr + ' gr ' + l.bulletDesc + ' · ' + l.powder) + '</option>').join('');
   // never preselect a load the entry was not recorded against
   const owner = e.id ? loadForEntry(e) : state.lib.find(l => l.id === e.loadId);
-  $('#dl-ladder').innerHTML = (ladderSteps || []).map(ch => '<option value="' + fmt1(ch) + '">').join('');
   sel.value = owner ? owner.id : '';
+  renderLadderList();
   const set = (s, v) => { $(s).value = v == null ? '' : v; };
   const isNew = !e.id;
   const barrel = barrelFor(owner ? owner.cartridge : state.cartridge);
@@ -2427,6 +2466,7 @@ function openLogEntry(prefill, ladderSteps, reuseTarget) {
   set('#g-rifle', isNew ? (e.rifle ?? (isNum(barrel) ? barrel + '" barrel' : '')) : e.rifle);
   set('#g-group', e.groupIn); set('#g-groupyd', isNum(e.groupYd) ? e.groupYd : 100); set('#g-notes', e.notes);
   document.querySelectorAll('.g-ps').forEach(cb => { cb.checked = !!(e.pressure && e.pressure.includes(cb.value)); });
+  tgtBusy(false);
   tgtResetForEntry(e, reuseTarget);
   openModal('#log-back', owner ? '#g-charge' : '#g-load');
 }
@@ -2448,6 +2488,9 @@ function saveLogEntry() {
   }
   const dateTxt = $('#g-date').value.trim();
   if (dateTxt && !/^\d{4}-\d{2}-\d{2}$/.test(dateTxt)) { alert('Enter the date as YYYY-MM-DD (for example ' + localISODate() + '), or leave it blank.'); return; }
+  const groupIn = num('#g-group'), groupYd = num('#g-groupyd');
+  if (groupIn !== undefined && groupIn < 0) { alert('Group size can’t be negative.'); return; }
+  if (groupYd !== undefined && groupYd <= 0) { alert('Group distance must be more than 0 yards.'); return; }
   const typedAvg = num('#g-avg');
   if (!tokens.length && typedAvg !== undefined && (typedAvg < 100 || typedAvg > 6000)) { alert('Average velocity must be between 100 and 6000 fps.'); return; }
   if (chargeGr > l.maxChargeGr + 1e-9) { if (!confirm('That charge is ABOVE the published maximum for this load (' + fmt1(l.maxChargeGr) + ' gr). Log it anyway?')) return; }
@@ -2461,7 +2504,7 @@ function saveLogEntry() {
     shots: st ? shots : undefined,
     avgFps: st ? st.avg : num('#g-avg'), sdFps: st ? st.sd : undefined, esFps: st ? st.es : undefined, n: st ? st.n : undefined,
     rifle: $('#g-rifle').value.trim() || undefined,
-    groupIn: num('#g-group'), groupYd: num('#g-groupyd'),
+    groupIn, groupYd,
     pressure: [...document.querySelectorAll('.g-ps:checked')].map(cb => cb.value),
     notes: $('#g-notes').value.trim() || undefined,
     target: state.tgt && !state.tgt.removed ? state.tgt.target : undefined,
@@ -2484,8 +2527,9 @@ function saveLogEntry() {
   if (i >= 0) state.log[i] = e; else state.log.push(e);
   saveLog();
   renderLog(); renderRecipe();
+  const ladder = logLadderSteps();
   closeModal('#log-back');
-  tgtAfterSave(e, state.logLadder);
+  tgtAfterSave(e, ladder);
 }
 function exportLog() {
   const blob = new Blob([JSON.stringify(state.log, null, 2)], { type: 'application/json' });
@@ -2553,14 +2597,14 @@ function applyH(h, x, y) {
   const w = h[6] * x + h[7] * y + h[8];
   return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w];
 }
-// True when the 4 points form a convex quadrilateral in the given order.
+// True when the 4 points form a convex quadrilateral in the given order, going clockwise on
+// screen (image y grows downward). A photo of a flat rectangle can't reverse its corners, so
+// corners tapped the other way round mean the axes would come out swapped or mirrored.
 function isConvexQuad(p) {
-  let sign = 0;
   for (let i = 0; i < 4; i++) {
     const a = p[i], b = p[(i + 1) % 4], c = p[(i + 2) % 4];
     const z = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-    if (Math.abs(z) < 1e-9) return false;
-    if (sign === 0) sign = Math.sign(z); else if (Math.sign(z) !== sign) return false;
+    if (!(z > 1e-9)) return false;
   }
   return true;
 }
@@ -2658,7 +2702,7 @@ function groupPlotSVG(t, size, opts) {
 function normalizeTarget(t) {
   if (!t || typeof t !== 'object' || Array.isArray(t) || !Array.isArray(t.shots)) return undefined;
   const shots = t.shots.filter(p => Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]) && Math.abs(p[0]) < 1000 && Math.abs(p[1]) < 1000)
-    .slice(0, 200).map(p => [p[0], p[1]]);
+    .slice(0, TM_MAX_SHOTS).map(p => [p[0], p[1]]);
   if (!shots.length || shots.length !== t.shots.length) return undefined;
   return { shots, aim: t.aim === true, method: t.method === '4pt' ? '4pt' : '2pt', photo: t.photo === true };
 }
@@ -2690,7 +2734,7 @@ const TargetPhotos = {
     });
   },
   async put(id, rec) {
-    try { await this._tx('readwrite', s => s.put(rec, id)); return true; }
+    try { await this._tx('readwrite', s => s.put(rec, id)); this._mem.delete(id); return true; }
     catch (e) { this._mem.set(id, rec); return false; }      // kept for this session only
   },
   async get(id) {
@@ -2748,12 +2792,20 @@ function tmMap() {
   tm.cal.hIn = parseFloat($('#tgt-rh').value);
   return targetMapper(tm.cal);
 }
-function tmSnapshot() { tm.undo.push(JSON.stringify({ pts: tm.cal.pts, aim: tm.aim, shots: tm.shots })); if (tm.undo.length > 200) tm.undo.shift(); }
+function tmSnapshot() { tm.undo.push(JSON.stringify({ method: tm.cal.method, pts: tm.cal.pts, aim: tm.aim, shots: tm.shots })); if (tm.undo.length > 200) tm.undo.shift(); }
 function tmUndo() {
   const s = tm.undo.pop();
-  if (!s) return;
+  if (!s) {
+    // nothing placed since the marker opened (editing saved marks): take back this step's last mark
+    if (tm.step === 'shots') tm.shots.pop();
+    else if (tm.step === 'aim') tm.aim = null;
+    else tm.cal.pts.pop();
+    tmUpdate();
+    return;
+  }
   const o = JSON.parse(s);
-  tm.cal.pts = o.pts; tm.aim = o.aim; tm.shots = o.shots;
+  tm.cal.method = o.method; tm.cal.pts = o.pts; tm.aim = o.aim; tm.shots = o.shots;
+  document.querySelectorAll('input[name="tgt-method"]').forEach(r => { r.checked = r.value === tm.cal.method; });
   tmUpdate();
 }
 // photo: {img, blob, w, h}; marks (optional): {cal, aim, shots, step}; ghosts: shots from earlier groups (px)
@@ -2822,7 +2874,10 @@ function tmPlace(p) {
     if (tm.cal.pts.length >= tmNeeded()) { tmSay('All ' + tmNeeded() + ' scale points are placed. Drag one to adjust it, or Undo.'); return; }
     tmSnapshot(); tm.cal.pts.push(p);
   } else if (tm.step === 'aim') { tmSnapshot(); tm.aim = p; }
-  else { tmSnapshot(); tm.shots.push(p); }
+  else {
+    if (tm.shots.length >= TM_MAX_SHOTS) { tmSay('That is the most shots one group can hold (' + TM_MAX_SHOTS + ').'); return; }
+    tmSnapshot(); tm.shots.push(p);
+  }
   tmUpdate();
 }
 function tmSay(t) { $('#tgt-instr').textContent = t; }
@@ -2838,7 +2893,7 @@ function tmInstruction() {
                  : 'Scale set. Check the distance below, then press Next.';
   }
   if (tm.step === 'aim') return tm.aim ? 'Aim point marked. Drag it to adjust, or press Next.' : 'Step 2: tap where you aimed (the center of the bull). Optional: press Skip if you only want the group size.';
-  return 'Step 3: tap the center of each bullet hole (' + tm.shots.length + ' marked). Press and hold for a magnifier; drag a mark to fine-tune it.';
+  return 'Step 3: tap the center of each bullet hole (' + tm.shots.length + ' marked). Press and hold for a magnifier; drag a mark to fine-tune it; Undo removes the last one.';
 }
 function tmUpdate() {
   // step bar
@@ -2904,8 +2959,10 @@ function tmRender() {
   const map = targetMapper(tm.cal);
   if (map && tm.shots.length >= 2) {
     const st = groupStats(tm.shots.map(map), null);
-    const a = S(tm.shots[st.pair[0]]), b = S(tm.shots[st.pair[1]]);
-    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffd400'; ctx.stroke(); ctx.setLineDash([]);
+    if (st.pair) {   // no pair when every shot is on one spot (two bullets through one hole)
+      const a = S(tm.shots[st.pair[0]]), b = S(tm.shots[st.pair[1]]);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffd400'; ctx.stroke(); ctx.setLineDash([]);
+    }
     const cxp = [tm.shots.reduce((s, p) => s + p[0], 0) / tm.shots.length, tm.shots.reduce((s, p) => s + p[1], 0) / tm.shots.length];
     const q = S(cxp); ctx.beginPath(); ctx.moveTo(q[0], q[1] - 8); ctx.lineTo(q[0] + 8, q[1]); ctx.lineTo(q[0], q[1] + 8); ctx.lineTo(q[0] - 8, q[1]); ctx.closePath(); ctx.lineWidth = 2; ctx.strokeStyle = '#ffd400'; ctx.stroke();
   }
@@ -3051,8 +3108,14 @@ function tmWire() {
   $('#tgt-zoom-in').addEventListener('click', () => tmZoom(1.4));
   $('#tgt-zoom-out').addEventListener('click', () => tmZoom(1 / 1.4));
   $('#tgt-fit').addEventListener('click', tmFit);
-  $('#tgt-next').addEventListener('click', () => tmGoto(TM_STEPS[Math.min(2, TM_STEPS.indexOf(tm.step) + 1)]));
-  $('#tgt-back-step').addEventListener('click', () => tmGoto(TM_STEPS[Math.max(0, TM_STEPS.indexOf(tm.step) - 1)]));
+  // a step button that hides or disables itself (Next on the last step, Back on the first) hands focus on
+  const keepFocus = (btn) => {
+    if (!btn.hidden && !btn.disabled) return;
+    const to = ['#tgt-next', '#tgt-done', '#tgt-back-step', '#tgt-cancel'].map(sel => $(sel)).find(b => !b.hidden && !b.disabled);
+    if (to) to.focus();
+  };
+  $('#tgt-next').addEventListener('click', (e) => { tmGoto(TM_STEPS[Math.min(2, TM_STEPS.indexOf(tm.step) + 1)]); keepFocus(e.currentTarget); });
+  $('#tgt-back-step').addEventListener('click', (e) => { tmGoto(TM_STEPS[Math.max(0, TM_STEPS.indexOf(tm.step) - 1)]); keepFocus(e.currentTarget); });
   document.querySelectorAll('.tgt-steps [data-goto]').forEach(b => b.addEventListener('click', () => tmGoto(b.dataset.goto)));
   $('#tgt-done').addEventListener('click', tmFinish);
   $('#tgt-cancel').addEventListener('click', tmClose);
@@ -3079,30 +3142,52 @@ function tgtSummaryRender() {
   box.innerHTML = '<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">' + groupPlotSVG(d.target, 120, { cls: 'tgt-mini' }) +
     '<div class="tgt-results" style="flex:1;min-width:200px">' + groupStatsHTML(storedTargetStats(d.target), yd) + '</div></div>';
 }
+// While a photo is being read, Save is held back so it can't store the entry without it.
+function tgtBusy(on) {
+  ['#btn-save-log', '#tgt-take', '#tgt-choose', '#tgt-edit', '#tgt-remove'].forEach(sel => { $(sel).disabled = on; });
+  $('#tgt-busy').hidden = !on;
+}
+// True when the log form that started a photo load is still the one open.
+const tgtSameForm = (session) => session === state.logSession && $('#log-back').classList.contains('open');
 async function tgtFromFile(file) {
   if (!file) return;
+  const session = state.logSession;
   let photo;
+  tgtBusy(true);
   try { photo = await prepareTargetPhoto(file); }
-  catch (err) { alert(err.message || 'That photo could not be opened.'); return; }
+  catch (err) { if (tgtSameForm(session)) alert(err.message || 'That photo could not be opened.'); return; }
+  finally { if (session === state.logSession) tgtBusy(false); }
+  if (!tgtSameForm(session)) return;
   // a fresh photo starts fresh, unless it is the same sheet reused for the next group
   tmOpen(photo, null, [], tgtApply);
 }
 function tgtApply(res) {
-  state.tgt = { target: res.target, photo: res.photo, marks: res.marks, ghosts: res.ghosts || [], changed: true, removed: false };
-  if (res.target.shots.length >= 2) $('#g-group').value = storedTargetStats(res.target).es.toFixed(2);
+  const prevAuto = state.tgt && state.tgt.autoGroup;
+  state.tgt = { target: res.target, photo: res.photo, marks: res.marks, ghosts: res.ghosts || [], changed: true, removed: false, autoGroup: null };
+  if (res.target.shots.length >= 2) {
+    state.tgt.autoGroup = storedTargetStats(res.target).es.toFixed(2);
+    $('#g-group').value = state.tgt.autoGroup;
+  } else if (prevAuto && $('#g-group').value === prevAuto) {
+    $('#g-group').value = '';   // one shot has no group size; drop the one an earlier marking filled in
+  }
   if (isNum(res.yd) && res.yd > 0) $('#g-groupyd').value = res.yd;
   tgtSummaryRender();
 }
 async function tgtEdit() {
   const d = state.tgt;
   if (!d || !d.target) return;
-  let photo = d.photo, marks = d.marks;
+  const session = state.logSession;
+  let photo = d.photo, marks = d.marks, ghosts = d.ghosts;
   if (!photo && state.logEditing) {
-    const rec = await TargetPhotos.get(state.logEditing);
-    if (rec && rec.blob) { try { photo = await photoFromBlob(rec.blob); marks = rec.marks; d.ghosts = rec.ghosts || []; } catch (e) { photo = null; } }
+    tgtBusy(true);
+    try {
+      const rec = await TargetPhotos.get(state.logEditing);
+      if (rec && rec.blob) { try { photo = await photoFromBlob(rec.blob); marks = rec.marks; ghosts = rec.ghosts || []; } catch (e) { photo = null; } }
+    } finally { if (session === state.logSession) tgtBusy(false); }
   }
+  if (!tgtSameForm(session) || state.tgt !== d) return;
   if (!photo) { alert('The photo for this entry is not stored on this device, so its marks cannot be edited here.'); return; }
-  d.photo = photo; d.marks = marks;
+  d.photo = photo; d.marks = marks; d.ghosts = ghosts;
   tmOpen(photo, Object.assign({}, marks, { step: 'shots' }), d.ghosts, tgtApply);
 }
 // Called by openLogEntry: set up the target part of the form for this entry.
@@ -3121,7 +3206,8 @@ async function tgtAfterSave(entry, ladder) {
   if (!d || !d.changed || !d.photo) return;
   const persisted = await TargetPhotos.put(entry.id, { blob: d.photo.blob, w: d.photo.w, h: d.photo.h, marks: d.marks, ghosts: d.ghosts, savedAt: Date.now() });
   // offer the next group on this sheet (a ladder test usually shoots several groups on one target)
-  const next = (ladder || []).find(ch => ch > entry.chargeGr + 1e-9);
+  const l = state.lib.find(x => x.id === entry.loadId);
+  const next = l ? (ladder || []).find(ch => ch > entry.chargeGr + 1e-9 && ch <= l.maxChargeGr + 1e-9) : undefined;
   const reuse = { photo: d.photo, cal: d.marks.cal, aim: null, ghosts: (d.ghosts || []).concat(d.marks.shots || []) };
   showToast((persisted ? 'Saved with the target photo.' : 'Saved. The photo could not be stored on this device and will be gone after a reload.') + ' Mark another group on this sheet?',
     [{ label: next ? 'Next group (' + fmt1(next) + ' gr)' : 'Another group', run: () => openLogEntry({ loadId: entry.loadId, chargeGr: next, groupYd: entry.groupYd }, ladder, reuse) }]);
@@ -3143,7 +3229,7 @@ async function openTargetViewer(id) {
   const e = state.log.find(x => x.id === id);
   if (!e || !e.target) return;
   const body = $('#tgtview-body');
-  const st = storedTargetStats(e.target), yd = e.groupYd || 100;
+  const st = storedTargetStats(e.target), yd = entryGroupYd(e);
   body.innerHTML = '<p class="recipe-sub" style="margin:0 0 8px">' + esc((e.date ? e.date + ' · ' : '') + e.cartridge + ' · ' + (e.bulletDesc || '') + ' · ' + e.powder + ' · ' + fmt1(e.chargeGr) + ' gr') + '</p>' +
     '<div class="tgtview-photo" id="tgtview-photo"></div>' +
     '<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-top:10px">' + groupPlotSVG(e.target, 200) + '<div class="tgt-results">' + groupStatsHTML(st, yd) + '</div></div>';
@@ -3273,7 +3359,7 @@ function renderBallistics() {
     '<p class="recipe-sub">' + fmt0(p.mv) + ' fps · ' + p.weightGr + ' gr · ' + p.model + ' BC ' + p.bc + ' · ' + p.zeroYd + ' yd zero · ' + p.sightIn + '″ sight height · ' + p.windMph + ' mph wind @ ' + p.windDeg + '° · ' + p.tempF + '°F, ' + fmt0(p.altFt) + ' ft</p>' +
     '<div class="recipe-grid"><div><div class="lib-scroll"><table class="ladder"><thead><tr><th>Range (yd)</th><th>Drop (in)</th><th>Drop (MOA)</th><th>Wind (in)</th><th>Wind (MOA)</th><th>Velocity (fps)</th><th>Energy (ft·lb)</th><th>Time (s)</th></tr></thead><tbody>' +
     rows.map(r => '<tr' + (Math.abs(r.yd - p.zeroYd) < 1e-9 ? ' class="target-row"' : '') + '><td>' + fmtYd(r.yd) + '</td><td>' + r.dropIn.toFixed(1) + '</td><td>' + r.dropMoa.toFixed(1) + '</td><td>' + r.driftIn.toFixed(1) + '</td><td>' + r.driftMoa.toFixed(1) + '</td><td>' + fmt0(r.v) + '</td><td>' + fmt0(r.e) + '</td><td>' + r.t.toFixed(3) + '</td></tr>').join('') +
-    '</tbody></table></div>' + (rows[rows.length - 1].yd < p.maxYd - 1e-6 ? '<p class="status-line status-nearmax"><span class="icon">&#9888;</span><span>The table stops at ' + fmtYd(rows[rows.length - 1].yd) + ' yd: past that the bullet drops below 200 fps or flies longer than 10 s, where this model is not reliable.</span></p>' : '') + '<p class="tip" style="color:var(--ink-2);font-size:12.5px">Negative drop = below line of sight. Wind values are for the crosswind component. Energy is a rough proxy for terminal performance; bullet construction and impact velocity window matter more.</p></div>' +
+    '</tbody></table></div>' + (rows[rows.length - 1].yd < Math.max(p.zeroYd, Math.floor(p.maxYd / p.stepYd + 1e-9) * p.stepYd) - 1e-6 ? '<p class="status-line status-nearmax"><span class="icon">&#9888;</span><span>The table stops at ' + fmtYd(rows[rows.length - 1].yd) + ' yd: past that the bullet drops below 200 fps or flies longer than 10 s, where this model is not reliable.</span></p>' : '') + '<p class="tip" style="color:var(--ink-2);font-size:12.5px">Negative drop = below line of sight. Wind values are for the crosswind component. Energy is a rough proxy for terminal performance; bullet construction and impact velocity window matter more.</p></div>' +
     '<div class="chart-wrap">' + trajectorySVG(rows) + '</div></div></div>';
 }
 function ballisticsFillFromRecipe() {
@@ -3314,6 +3400,21 @@ function ballisticsFillFromRecipe() {
 }
 
 /* ============================ wiring ============================ */
+// A field's 'change' fires as focus leaves it, which pressing a button elsewhere causes.
+// Re-rendering at that moment would replace that button under the pointer and lose its
+// click, so a re-render triggered then waits until the press is over. It runs as the click
+// starts: the click still reaches the button that was pressed, and whatever that button
+// then shows or focuses is in the up-to-date page.
+const pointerPress = { down: false, queue: [] };
+function flushPress() { pointerPress.down = false; pointerPress.queue.splice(0).forEach(fn => fn()); }
+['pointerdown', 'mousedown'].forEach(t => document.addEventListener(t, () => { pointerPress.down = true; }, true));
+['pointerup', 'mouseup', 'pointercancel'].forEach(t => document.addEventListener(t, () => setTimeout(flushPress, 0), true));
+document.addEventListener('click', flushPress, true);
+function afterPress(fn) {
+  if (!pointerPress.down) { fn(); return; }
+  pointerPress.queue.push(fn);
+  setTimeout(flushPress, 1500);   // in case the release happened outside the window
+}
 const clampNum = (v, lo, hi) => { const n = parseFloat(v); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
 function renderSetupSummary() {
   const el = $('#setup-summary');
@@ -3373,6 +3474,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // pickers
   $('#sel-cartridge').addEventListener('change', (e) => {
     state.cartridge = e.target.value; state.bulletKey = null; state.selectedLoadId = null; state.targetVel = null;
+    $('#setup-msg').textContent = '';   // a note about another cartridge's barrel no longer applies
     renderBullets(); renderSetupPanel(); renderVelocity(); renderResults();
   });
   $('#sel-bullet').addEventListener('change', (e) => {
@@ -3384,11 +3486,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // a cleared or invalid entry shows the current target again rather than going blank
     if (!isFinite(n)) { $('#inp-vel').value = isNum(state.targetVel) ? state.targetVel : ''; return; }
     const lo = parseFloat($('#inp-vel').min), hi = parseFloat($('#inp-vel').max);
-    const snapped = fromSlider ? Math.round(n / 5) * 5 : Math.round(n);   // the slider moves in 5 fps steps
+    // The slider moves in 5 fps steps, snapped in the direction it moved: rounding to the nearest
+    // step would undo a 1 fps arrow-key nudge when the band ends between multiples of 5.
+    const cur = isNum(state.targetVel) ? state.targetVel : n;
+    const snapped = !fromSlider ? Math.round(n) : n > cur ? Math.ceil(n / 5) * 5 : n < cur ? Math.floor(n / 5) * 5 : Math.round(n / 5) * 5;
     state.targetVel = Math.max(lo, Math.min(hi, snapped));
     $('#inp-vel').value = state.targetVel;
     $('#rng-vel').value = state.targetVel;
-    renderResults();
+    if (fromSlider) renderResults(); else afterPress(renderResults);
   };
   $('#inp-vel').addEventListener('change', (e) => velChange(e.target.value));
   $('#rng-vel').addEventListener('input', (e) => velChange(e.target.value, true));
@@ -3421,26 +3526,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.cartridge) {
       const raw = $('#s-barrel').value.trim(), bn = parseFloat(raw);
       const b = (isFinite(bn) && bn >= 1 && bn <= 50) ? bn : null;
-      if (raw && b === null) setupMsg.push('Barrel length must be 1–50 in; it was not applied.');
-      if (b === null) delete state.setup.barrelByCart[state.cartridge];
+      const had = state.setup.barrelByCart[state.cartridge];
+      // an out-of-range entry is refused and the barrel length already saved is kept
+      if (raw && b === null) setupMsg.push('Barrel length must be 1–50 in, so it was not changed' + (isNum(had) ? ' (still ' + had + ' in).' : '.'));
+      else if (b === null) delete state.setup.barrelByCart[state.cartridge];
       else state.setup.barrelByCart[state.cartridge] = b;
     }
     state.setup.twist = $('#s-twist').value.replace(/\s+/g, ' ').trim().slice(0, 20);
     const traw = $('#s-temp').value.trim(), tn = parseFloat(traw);
-    state.setup.tempF = (isFinite(tn) && tn >= -40 && tn <= 130) ? tn : null;
-    if (traw && state.setup.tempF === null) setupMsg.push('Temperature must be −40 to 130 °F; it was not applied.');
+    const tOk = isFinite(tn) && tn >= -40 && tn <= 130;
+    if (traw && !tOk) setupMsg.push('Temperature must be −40 to 130 °F, so it was not changed' + (isNum(state.setup.tempF) ? ' (still ' + state.setup.tempF + ' °F).' : '.'));
+    else state.setup.tempF = tOk ? tn : null;
     state.setup.fpsPerInch = clampNum($('#s-fpi').value, 0, 100) ?? SETUP_DEFAULTS.fpsPerInch;
     state.setup.fpsPerDegF = clampNum($('#s-fpd').value, 0, 5) ?? SETUP_DEFAULTS.fpsPerDegF;
     saveSetup();
-    renderSetupPanel();
     $('#setup-msg').textContent = setupMsg.join(' ');
-    renderVelocity(); renderResults();
+    afterPress(() => { renderSetupPanel(); renderVelocity(); renderResults(); });
   };
   ['#s-barrel', '#s-twist', '#s-temp', '#s-fpi', '#s-fpd'].forEach(sel => $(sel).addEventListener('change', setupChanged));
   $('#s-clear').addEventListener('click', () => {
     // clears what the panel shows: this cartridge's barrel plus the shared settings
     if (state.cartridge) delete state.setup.barrelByCart[state.cartridge];
     Object.assign(state.setup, { twist: '', tempF: null, fpsPerInch: SETUP_DEFAULTS.fpsPerInch, fpsPerDegF: SETUP_DEFAULTS.fpsPerDegF });
+    $('#setup-msg').textContent = '';
     saveSetup(); renderSetupPanel(); renderVelocity(); renderResults();
   });
 
@@ -3466,13 +3574,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#tgt-edit').addEventListener('click', tgtEdit);
   $('#tgt-remove').addEventListener('click', () => { if (state.tgt) { state.tgt.removed = true; tgtSummaryRender(); } });
   $('#g-groupyd').addEventListener('input', tgtSummaryRender);
+  $('#g-load').addEventListener('change', renderLadderList);
   $('#tgtview-close').addEventListener('click', closeTargetViewer);
 
   // ballistics
   $('#btn-bal-calc').addEventListener('click', renderBallistics);
   $('#btn-bal-fill').addEventListener('click', ballisticsFillFromRecipe);
-  // typing your own BC, model or weight means the inputs no longer describe the filled bullet
-  ['#b-bc', '#b-model', '#b-wt'].forEach(sel => $(sel).addEventListener('input', () => { delete $('#b-bc').dataset.bullet; }));
+  // a different bullet weight means the inputs no longer describe the filled bullet; a BC or
+  // model typed for it is that bullet's, and is remembered for it on Calculate
+  $('#b-wt').addEventListener('input', () => { delete $('#b-bc').dataset.bullet; });
   try {
     const saved = JSON.parse(localStorage.getItem(LS_BAL) || 'null');
     if (saved) {
@@ -3493,8 +3603,20 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-restore').addEventListener('click', () => {
     const mine = state.lib.filter(l => l.origin !== 'builtin');
     if (confirm('Restore all built-in published loads (including any you deleted)? Your ' + mine.length + ' own and imported load(s) are kept.')) {
-      state.lib = sanitizeIds(seedLibrary().concat(mine));
+      // A load you edited from a built-in still has the built-in's id. Give it a new one, and move
+      // its range-log entries with it, so they stay with your edited figures (your max, not the
+      // restored one) instead of attaching to the restored built-in.
+      const seeded = seedLibrary(), seededIds = new Set(seeded.map(l => l.id)), stamp = Date.now().toString(36);
+      let moved = false;
+      mine.forEach((l, i) => {
+        if (!seededIds.has(l.id)) return;
+        const nid = 'r' + stamp + '_' + i;
+        state.log.forEach(e => { if (e.loadId === l.id) { e.loadId = nid; moved = true; } });
+        l.id = nid;
+      });
+      state.lib = sanitizeIds(seeded.concat(mine));
       saveLibrary(state.lib);
+      if (moved) saveLog();
       refreshAll();
     }
   });
