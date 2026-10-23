@@ -59,10 +59,13 @@ for several bullets of similar weight; each such load's notes say so.
 
 ## Data
 
-The built-in library was transcribed from powder manufacturers' free published load data
-(each entry links its source URL). Entries marked **✓ verified** were independently
-re-fetched and every number compared against the source at build time; **⚠ unverified**
-entries could not be re-checked automatically.
+The built-in library was transcribed from powder and bullet makers' free published load data
+(each entry links its source URL). Every built-in entry is marked **✓ verified**: it was
+independently re-fetched and every number compared against the source at build time.
+**your entry** marks loads you added or edited, and **⚠ imported — verify** marks loads from
+an imported file that don't match the built-in data; check those yourself.
+Where Hodgdon or Nosler publish load density (case fill), it is included and shown on the
+recipe card's Case fill box.
 
 **Always cross-check every load against the publisher's current data or a current printed
 manual before loading a single round.** Published data changes, and transcription errors
